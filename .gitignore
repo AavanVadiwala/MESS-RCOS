@@ -1,0 +1,31 @@
+# ESP-IDF generated outputs and downloaded dependencies
+/firmware/build*/
+/firmware/managed_components/
+/firmware/sdkconfig.old
+/firmware/sdkconfig.*.old
+*.elf
+*.bin
+*.map
+*.log
+
+# Local editor/tool settings (sdkconfig remains versioned)
+/.vscode/
+/.idea/
+/.cache/
+
+# Python/tool caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Local secrets and operating-system files
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*~

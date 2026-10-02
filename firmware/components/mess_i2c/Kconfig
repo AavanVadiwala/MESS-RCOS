@@ -1,0 +1,14 @@
+menu "MESS I2C"
+    config MESS_I2C_SDA
+        int "SDA GPIO"
+        range 0 33
+        default 21
+    config MESS_I2C_SCL
+        int "SCL GPIO"
+        range 0 33
+        default 22
+    config MESS_I2C_FREQUENCY
+        int "Bus frequency (Hz)"
+        range 10000 400000
+        default 100000
+endmenu
