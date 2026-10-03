@@ -1,16 +1,24 @@
 # MESS
 
-ESP32 firmware with serial and browser command terminals for I2C devices, ESP-NOW board-to-board messages, and Wi-Fi broadcasts to laptops. Uses ESP-IDF v6.1.
+This branch makes building and flashing an ESP32 easier and brings tools adapted from several ESP-IDF examples into a single firmware image. The goal is one flash containing I2C tools, networking, and mesh tools, accessible through a common MCU terminal.
+
+The current firmware includes `i2ctools`, ESP-NOW board-to-board communication, and a Wi-Fi hotspot with a browser terminal. Mesh tools are planned and are not implemented in this branch yet. Uses ESP-IDF v6.1.
 
 ## Install and open the terminal
 
-From PowerShell in `C:/MESS`, replacing COM4 with your board port:
+Run the script from normal PowerShell in `C:/MESS`, passing your board's serial port. You do not need to open or manually activate an ESP-IDF terminal:
 
 ```powershell
-.\build_and_flash.ps1 -Port COM4 -Monitor
+.\build_and_flash.ps1 -Port COM10
 ```
 
-No ESP-IDF terminal is required. The script reuses an active ESP-IDF environment or automatically loads the installed environment from `C:/Espressif/tools/eim_idf.json`. It uses the local VS Code ESP-IDF selection when available. ESP-IDF itself must already be installed.
+This builds and flashes the combined firmware. To also open the MCU terminal afterward:
+
+```powershell
+.\build_and_flash.ps1 -Port COM10 -Monitor
+```
+
+Replace COM10 with your board's port. The script reuses an active ESP-IDF environment or automatically loads the installed environment from `C:/Espressif/tools/eim_idf.json`. It uses the local VS Code ESP-IDF selection when available. ESP-IDF itself must already be installed.
 
 Check setup without building or flashing:
 
@@ -29,21 +37,6 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\build_and_flash.ps1 -P
 To monitor an already flashed board without rebuilding, use `idf.py -p COM4 monitor` from `firmware` in an activated ESP-IDF terminal. The repository has one standalone script: `build_and_flash.ps1`.
 
 At `mess>` choose `i2ctools`, `comm`, or `wifi`. Each accepts `help` and `exit`. See [firmware/CONSOLES.md](firmware/CONSOLES.md) for commands and testing.
-
-## Laptop Wi-Fi quick start
-
-1. Enter `wifi` at `mess>`.
-2. Join the laptop to the printed `MESS-xxxxxx` hotspot using password `mess-demo-123`.
-3. Open `http://192.168.4.1` in your laptop browser.
-4. Type any ordinary line at `wifi>` and press Enter. The browser updates automatically.
-
-The webpage also has a command terminal. Enter `i2ctools`, then `scan` or `write-read 0x76 1 0xD0`, and see the output in the browser. `exit` returns the browser to `mess>`. You can also send full commands such as `comm status` or `i2ctools scan`. Browser and USB terminal modes are independent; their hardware operations are serialized.
-
-Terminal output is returned directly to the requesting browser and discarded on the MCU. The display exists only in the current page, clears on reload, and can be cleared with the button. System/driver logs remain on the USB terminal. The separate broadcasts panel still uses the existing 16-message history.
-
-Each line also goes out as a UDP broadcast on port 3333 for external receivers. The included browser terminal needs no receiver script or inbound firewall rule.
-
-This direct hotspot connection needs no router and provides no Internet access. The password is a demo default in `mess_wifi.c`; change it and rebuild for your own use. The browser serves all connected clients; the MCU retains only 16 messages in RAM. UDP has no delivery guarantee.
 
 ## Components
 
