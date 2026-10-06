@@ -15,11 +15,45 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
+#include "esp_random.h"
+#include "esp_app_desc.h"
+
+/* Explicit byte layout: magic[8], version, type, nonce[4], ELF SHA256[32]. */
+#define DISCOVERY_SIZE 46
+#define DISCOVERY_REQUEST 1
+#define DISCOVERY_REPLY 2
+#define DISCOVERY_PROBES 10
+static const uint8_t discovery_magic[8] = {'M','E','S','S','D','I','S','C'};
 
 typedef struct { uint8_t mac[6]; uint8_t data[200]; int length; int rssi; } packet_t;
 static QueueHandle_t inbox, history, completion;
+static QueueHandle_t discovery_requests, discovery_results;
+static SemaphoreHandle_t transmit_lock;
 static bool ready, now_started;
 static bool pending;
+/* Accessed only while holding mess_commands_lock. */
+static bool discovery_live;
+static TaskHandle_t discovery_live_task;
+static bool discovery_frame(const uint8_t *data, int length)
+{
+    return length == DISCOVERY_SIZE && !memcmp(data, discovery_magic, 8) &&
+           data[8] == 1 && (data[9] == DISCOVERY_REQUEST || data[9] == DISCOVERY_REPLY) &&
+           !memcmp(data + 14, esp_app_get_description()->app_elf_sha256, 32);
+}
+static void discovery_responder(void *argument)
+{
+    (void)argument;
+    packet_t packet;
+    const uint8_t broadcast[6] = {255,255,255,255,255,255};
+    for (;;) {
+        if (xQueueReceive(discovery_requests, &packet, portMAX_DELAY) != pdTRUE) continue;
+        /* Spread replies in time so nearby boards do not all answer at once. */
+        vTaskDelay(pdMS_TO_TICKS(20 + esp_random() % 180));
+        packet.data[9] = DISCOVERY_REPLY;
+        mess_comm_send(broadcast, packet.data, DISCOVERY_SIZE);
+    }
+}
 static void print_mac(const uint8_t mac[6], FILE *out);
 static void print_packet(const packet_t *packet, FILE *out)
 {
@@ -55,6 +89,13 @@ static void received(const esp_now_recv_info_t *info, const uint8_t *data, int l
     packet_t packet = {.length=length, .rssi=info->rx_ctrl ? info->rx_ctrl->rssi : 0};
     memcpy(packet.mac, info->src_addr, 6);
     memcpy(packet.data, data, length);
+    if (length >= 8 && !memcmp(data, discovery_magic, 8)) {
+        if (discovery_frame(data, length)) {
+            xQueueSend(data[9] == DISCOVERY_REQUEST ? discovery_requests : discovery_results,
+                       &packet, 0);
+        }
+        return;
+    }
     /* Drop newest on full queue; never block the Wi-Fi task. */
     xQueueSend(inbox, &packet, 0);
 }
@@ -71,12 +112,21 @@ esp_err_t mess_comm_start(void)
     inbox = xQueueCreate(8, sizeof(packet_t));
     history = xQueueCreate(8, sizeof(packet_t));
     completion = xQueueCreate(1, sizeof(esp_now_send_status_t));
-    if (!inbox || !history || !completion) { err=ESP_ERR_NO_MEM; goto fail; }
+    discovery_requests = xQueueCreate(8, sizeof(packet_t));
+    discovery_results = xQueueCreate(32, sizeof(packet_t));
+    transmit_lock = xSemaphoreCreateMutex();
+    if (!inbox || !history || !completion || !discovery_requests ||
+        !discovery_results || !transmit_lock) { err=ESP_ERR_NO_MEM; goto fail; }
     err=esp_now_init(); if (err != ESP_OK) goto fail;
     now_started=true;
     err=esp_now_register_recv_cb(received); if (err != ESP_OK) goto fail;
     err=esp_now_register_send_cb(sent); if (err != ESP_OK) goto fail;
+    TaskHandle_t responder = NULL;
+    if (xTaskCreate(discovery_responder, "mess_discover", 3072, NULL, 3, &responder) != pdPASS) {
+        err=ESP_ERR_NO_MEM; goto fail;
+    }
     if (xTaskCreate(receive_task, "mess_receive", 3072, NULL, 3, NULL) != pdPASS) {
+        vTaskDelete(responder);
         err=ESP_ERR_NO_MEM; goto fail;
     }
     ready=true;
@@ -87,9 +137,12 @@ fail:
     if (inbox) { vQueueDelete(inbox); inbox=NULL; }
     if (history) { vQueueDelete(history); history=NULL; }
     if (completion) { vQueueDelete(completion); completion=NULL; }
+    if (discovery_requests) { vQueueDelete(discovery_requests); discovery_requests=NULL; }
+    if (discovery_results) { vQueueDelete(discovery_results); discovery_results=NULL; }
+    if (transmit_lock) { vSemaphoreDelete(transmit_lock); transmit_lock=NULL; }
     return err;
 }
-esp_err_t mess_comm_send(const uint8_t destination[6], const uint8_t *data, size_t length)
+static esp_err_t send_locked(const uint8_t destination[6], const uint8_t *data, size_t length)
 {
     if (!ready) return ESP_ERR_INVALID_STATE;
     if (!destination || !data || !length || length>200) return ESP_ERR_INVALID_ARG;
@@ -119,6 +172,85 @@ esp_err_t mess_comm_send(const uint8_t destination[6], const uint8_t *data, size
     pending=false;
     return status==ESP_NOW_SEND_SUCCESS ? ESP_OK : ESP_FAIL;
 }
+esp_err_t mess_comm_send(const uint8_t destination[6], const uint8_t *data, size_t length)
+{
+    if (!ready) return ESP_ERR_INVALID_STATE;
+    xSemaphoreTake(transmit_lock, portMAX_DELAY);
+    esp_err_t err = send_locked(destination, data, length);
+    xSemaphoreGive(transmit_lock);
+    return err;
+}
+static esp_err_t discover(FILE *out)
+{
+    uint8_t request[DISCOVERY_SIZE] = {0}, own_mac[6], seen[32][6];
+    const uint8_t broadcast[6] = {255,255,255,255,255,255};
+    memcpy(request, discovery_magic, 8);
+    request[8] = 1;
+    request[9] = DISCOVERY_REQUEST;
+    memcpy(request + 14, esp_app_get_description()->app_elf_sha256, 32);
+    esp_err_t err = esp_wifi_get_mac(WIFI_IF_STA, own_mac);
+    if (err != ESP_OK) return err;
+    xQueueReset(discovery_results);
+    unsigned count = 0;
+    unsigned replies[32] = {0};
+    int last_rssi[32] = {0};
+    bool truncated = false;
+    fprintf(out, "Searching current channel: 10 probes, about 5 seconds; exact firmware build only...\n");
+    fflush(out);
+    for (unsigned round = 0; round < DISCOVERY_PROBES; ++round) {
+        uint32_t nonce = esp_random();
+        memcpy(request + 10, &nonce, 4);
+        bool answered[32] = {0};
+        err = mess_comm_send(broadcast, request, sizeof(request));
+        if (err != ESP_OK) return err;
+        TickType_t started = xTaskGetTickCount(), window = pdMS_TO_TICKS(500);
+        for (;;) {
+            TickType_t elapsed = xTaskGetTickCount() - started;
+            if (elapsed >= window) break;
+            packet_t packet;
+            if (xQueueReceive(discovery_results, &packet, window - elapsed) != pdTRUE) break;
+            if (memcmp(packet.data + 10, &nonce, 4) || !memcmp(packet.mac, own_mac, 6)) continue;
+            unsigned i;
+            for (i = 0; i < count; ++i) if (!memcmp(seen[i], packet.mac, 6)) break;
+            if (i == count) {
+                if (count == 32) { truncated = true; continue; }
+                memcpy(seen[count++], packet.mac, 6);
+            }
+            if (!answered[i]) { ++replies[i]; answered[i] = true; }
+            last_rssi[i] = packet.rssi;
+        }
+    }
+    fprintf(out, "Found %u other matching board(s) in direct radio range.\n", count);
+    for (unsigned i = 0; i < count; ++i) {
+        fprintf(out, "  "); print_mac(seen[i], out);
+        fprintf(out, "  distance: unavailable  radio: 250 Kbps (configured)  RSSI %d dBm  replies %u/%u (%u%%)\n",
+                last_rssi[i], replies[i], DISCOVERY_PROBES,
+                replies[i] * 100 / DISCOVERY_PROBES);
+    }
+    fprintf(out, "Reply percentage is a short round-trip sample, not guaranteed delivery or identity verification.\n");
+    if (truncated) fprintf(out, "Result limit reached (32 boards).\n");
+    if (!count) fprintf(out, "Check that other boards have this same image, are powered on, and use the same channel.\n");
+    return ESP_OK;
+}
+static void discovery_live_worker(void *argument)
+{
+    (void)argument;
+    for (;;) {
+        mess_commands_lock();
+        if (!discovery_live) {
+            discovery_live_task = NULL;
+            mess_commands_unlock();
+            vTaskDelete(NULL);
+            return;
+        }
+        fputs("\n[Live discovery]\n", stdout);
+        esp_err_t err = discover(stdout);
+        if (err != ESP_OK) printf("Discovery error: %s\n", esp_err_to_name(err));
+        fflush(stdout);
+        mess_commands_unlock();
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+}
 static bool parse_mac(const char *text,uint8_t mac[6])
 {
     if (strlen(text)!=17) return false;
@@ -135,7 +267,8 @@ static void print_mac(const uint8_t mac[6], FILE *out)
 }
 static void help(FILE *out)
 {
-    fprintf(out, "%s\n", "status | channel N (1..11) | send MAC \"message\" | broadcast \"message\" | receive | exit");
+    fprintf(out, "%s\n", "status | discover [live|stop] | channel N (1..11) | send MAC \"message\" | broadcast \"message\" | receive | exit");
+    fprintf(out, "%s\n", "discover: fresh link sample; discover live: repeat on USB; discover stop: stop updates. Distance is unavailable; Kbps is configured rate.");
     fprintf(out, "%s\n", "All boards listen at boot on channel 1. Long-range 250 Kbps; messages <=200 bytes, unencrypted.");
     fprintf(out, "%s\n", "Incoming messages print automatically on USB/UART, in any console mode. receive drains the last 8 messages.");
 }
@@ -157,12 +290,27 @@ int mess_comm_run(int argc, char **argv, FILE *out)
             err=esp_wifi_get_mac(WIFI_IF_STA,mac);
             if (err==ESP_OK) err=esp_wifi_get_channel(&channel,&secondary);
             if (err==ESP_OK) { fprintf(out, "MAC "); print_mac(mac, out); fprintf(out, " channel %u; LR 250 Kbps; automatic USB receive; history %u\n",channel,(unsigned)uxQueueMessagesWaiting(history)); }
+        } else if (!strcmp(args[0],"discover") && n==1) {
+            err = discover(out);
+        } else if (!strcmp(args[0],"discover") && n==2 && !strcmp(args[1],"live")) {
+            discovery_live = true;
+            if (!discovery_live_task &&
+                xTaskCreate(discovery_live_worker, "mess_live", 4096, NULL, 2,
+                            &discovery_live_task) != pdPASS) {
+                discovery_live = false;
+                err = ESP_ERR_NO_MEM;
+            }
+            if (err == ESP_OK) fprintf(out, "Live discovery enabled on USB/UART (about every 6 seconds). Use discover stop to stop.\n");
+        } else if (!strcmp(args[0],"discover") && n==2 && !strcmp(args[1],"stop")) {
+            discovery_live = false;
+            fprintf(out, "Live discovery stopped.\n");
         } else if (!strcmp(args[0],"channel") && n==2) {
             char *end; long channel=strtol(args[1],&end,10);
             if (*end || end==args[1] || channel<1 || channel>11) err=ESP_ERR_INVALID_ARG;
-            else if (pending) err=ESP_ERR_INVALID_STATE;
             else {
-                err=mess_wifi_set_channel(channel);
+                xSemaphoreTake(transmit_lock, portMAX_DELAY);
+                err = pending ? ESP_ERR_INVALID_STATE : mess_wifi_set_channel(channel);
+                xSemaphoreGive(transmit_lock);
                 if (err==ESP_OK) fprintf(out, "Shared radio channel: %ld\n",channel);
                 else if (err==ESP_ERR_INVALID_STATE)
                     fprintf(out, "Disconnect hotspot clients before changing channels; both ESP32s must use the same channel.\n");

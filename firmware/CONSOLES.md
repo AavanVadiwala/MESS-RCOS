@@ -20,6 +20,18 @@ Default pins remain SDA21/SCL22 at 100 kHz; change them with menuconfig's MESS I
 
 ## Wireless communication between two boards
 
+### Find nearby boards and sample link quality
+
+From the USB `mess>` prompt enter `comm`, then `discover`. From the browser command terminal run `comm discover`.
+
+For continuously refreshed USB output, enter `discover live` in `comm`. Run `discover stop` to stop (or `comm discover stop` in the browser). Each scan takes about five seconds, followed by a one-second pause. Stopping or running another command can wait for the current scan to finish. Updates continue after leaving `comm` until explicitly stopped or rebooted. Browser commands can start the live worker, but its repeated output goes to USB/UART; the browser uses one-shot `comm discover` for results.
+
+Each board row labels distance as unavailable, since ESP-NOW RSSI is not a distance sensor. The displayed 250 Kbps is the configured raw transmit rate, not measured useful throughput. Signal strength is the last reply's RSSI; replies out of ten indicate the short sample's round-trip reliability. No fabricated distance or throughput estimate is produced.
+
+Discovery broadcasts ten versioned probes on the current channel over about five seconds. Other boards automatically answer with random reply delays to reduce collisions. Only replies matching this exact firmware image's ELF SHA256 and the current probe's random identifier are counted; duplicate replies count once per board per probe. The output lists each board's MAC, last received reply RSSI (dBm), and replies out of ten (percentage). The local board is excluded. The receive callback queues discovery separately from text traffic so commands waiting for discovery cannot block replies. A separate transmit mutex serializes console sends and automatic replies.
+
+This is a sample of round-trip success, not a measurement of one-way packet loss, cryptographic identity, or guaranteed future reliability. Results include at most 32 responding boards in direct range; this does not discover remote mesh nodes, scan Wi-Fi routers, or switch channels. Boards with older firmware cannot answer; all boards must be flashed with the same new image. Discovery control frames are not printed as chat messages or added to message history. A zero-result scan completes normally with troubleshooting guidance.
+
 The `mess_comm` component uses ESP-NOW on the shared `mess_wifi` station interface. It needs no router, SSID, or password. The shared radio also creates the laptop hotspot. This is direct one-hop communication, not ESP-WIFI-MESH. The STA interface enables Espressif LR; all outgoing ESP-NOW peers use 250 Kbps LR. The laptop AP keeps normal Wi-Fi compatibility. Both wireless components can remain active; a separate Wi-Fi owner requires integration work.
 
 Flash the same firmware to both boards. On both:
