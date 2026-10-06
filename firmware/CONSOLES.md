@@ -20,7 +20,7 @@ Default pins remain SDA21/SCL22 at 100 kHz; change them with menuconfig's MESS I
 
 ## Wireless communication between two boards
 
-The `mess_comm` component uses ESP-NOW on the shared `mess_wifi` station interface. It needs no router, SSID, or password. The shared radio also creates the laptop hotspot. This is direct one-hop communication, not ESP-WIFI-MESH. Both wireless components can remain active; a separate Wi-Fi owner requires integration work.
+The `mess_comm` component uses ESP-NOW on the shared `mess_wifi` station interface. It needs no router, SSID, or password. The shared radio also creates the laptop hotspot. This is direct one-hop communication, not ESP-WIFI-MESH. The STA interface enables Espressif LR; all outgoing ESP-NOW peers use 250 Kbps LR. The laptop AP keeps normal Wi-Fi compatibility. Both wireless components can remain active; a separate Wi-Fi owner requires integration work.
 
 Flash the same firmware to both boards. On both:
 
@@ -48,11 +48,11 @@ For a broadcast from either board:
 broadcast "hello nearby MESS boards"
 ```
 
-Then run `receive` on the other board. Both boards must have entered comm at least once and use the same channel (default 1; console supports 1..11). Radio stays active after exit so receive can retrieve queued messages on re-entry. Messages are not printed asynchronously, avoiding disruption of typed console input.
+Every board starts listening at boot on channel 1; only the sender needs to enter `comm`. Incoming messages print automatically on USB/UART as `[ESP-NOW RX] sender (bytes, RSSI): message`, even at `mess>` or in another console. All boards must use the same channel (console supports 1..11). `receive` optionally replays the last eight messages and works in the browser command terminal too. The USB prompt may be visually interrupted by a received message; input is retained. Press Enter to obtain a fresh prompt. Browser terminals do not automatically display incoming ESP-NOW messages; use `comm receive` there.
 
 The hotspot uses the same channel as ESP-NOW. Selecting the channel already in use succeeds without changing the radio, including while laptops are connected. Disconnect laptops before selecting a different channel; actual changes are rejected while a laptop is connected. Set matching channels on both boards before joining a laptop to the hotspot. A second board is needed to verify ESP-NOW delivery.
 
-Limits: 200-byte text payloads; 8 received packets in RAM; newest packets are dropped if the inbox fills. Drain using receive. Unicast peers are added as used; ESP-NOW's finite peer table is not evicted automatically. Reboot clears it. Send waits up to two seconds for radio completion. Radio completion, especially broadcast, is not proof of application receipt; check the remote inbox. No application acknowledgements, automatic discovery, retries, encryption, persistence, or multihop forwarding are implemented. Do not send credentials through this console.
+Limits: 200-byte text payloads; 8 packets awaiting the UART worker; new arrivals drop if that queue fills. The worker separately retains the latest 8 displayed messages for receive; older history is discarded. Unicast peers are added as used; ESP-NOW's finite peer table is not evicted automatically. Reboot clears it. Send waits up to two seconds for radio completion. Radio completion, especially broadcast, is not proof of application receipt; check the remote inbox. No application acknowledgements, automatic discovery, retries, encryption, persistence, or multihop forwarding are implemented. Do not send credentials through this console.
 
 Commands accept decimal values and quoted messages; MAC addresses use six colon-separated hexadecimal octets. Incoming nonprintable bytes are escaped for display.
 
@@ -73,7 +73,7 @@ exit
 
 `help`, `status`, and `exit` are commands. Use `broadcast TEXT` to send reserved words literally. Empty messages are ignored, and messages longer than 480 bytes are rejected. No other terminal modes automatically forward their output.
 
-On your laptop, join the hotspot printed by `status` (`MESS-xxxxxx`, demo password `mess-demo-123`) and open `http://192.168.4.1`. The page polls every half-second and independently displays new messages for each connected browser. It displays message content as text, including markup and quotes. Up to four devices can join. This hotspot provides no Internet access.
+The hotspot and browser terminal start automatically at boot; entering `wifi` is only needed to send typed lines from USB. On your laptop, join the hotspot printed by `status` (`MESS-xxxxxx`, demo password `mess-demo-123`) and open `http://192.168.4.1`. The page polls every half-second and independently displays new messages for each connected browser. It displays message content as text, including markup and quotes. Up to four devices can join. This hotspot provides no Internet access.
 
 Actual UDP broadcasts go to `192.168.4.255:3333` and can be consumed by an external UDP receiver. The browser terminal is included and needs no receiver script. UDP broadcasts are not acknowledged or retried. A successful send is not evidence of laptop receipt.
 
@@ -110,7 +110,7 @@ wifi> exit
 
 Full commands such as `i2ctools scan` and `comm status` also work without entering a mode. Within browser `wifi` mode, ordinary lines become broadcasts, just like the USB console. `help`, `status`, and `exit` retain their command meanings.
 
-Press Enter or Send to submit. The input stays disabled until the command returns. A scan may take several seconds. Returned text includes command errors and result bytes. Browser commands do not read from the UART or change its prompt. Concurrent browser/USB I2C and ESP-NOW commands run one at a time. ESP-NOW `receive` consumes the shared inbox; another terminal cannot receive the same queued packets again.
+Press Enter or Send to submit. The input stays disabled until the command returns. A scan may take several seconds. Returned text includes command errors and result bytes. Browser commands do not read from the UART or change its prompt. Concurrent browser/USB I2C and ESP-NOW commands run one at a time. ESP-NOW `receive` consumes shared message history; another terminal cannot replay the same history again, but automatic USB printing is independent of this history.
 
 No terminal session history is saved on the MCU. Output is briefly captured for the response and then released; each browser keeps only its visible display (up to about 64 KB). Reload or Clear display removes that display. System/Wi-Fi driver logs remain on UART. The separate MCU broadcasts panel retains its existing 16-message RAM history.
 

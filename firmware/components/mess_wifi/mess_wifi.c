@@ -30,6 +30,10 @@ esp_err_t mess_wifi_start(void)
     if (err != ESP_OK) goto fail_wifi;
     err = esp_wifi_set_mode(WIFI_MODE_APSTA);
     if (err != ESP_OK) goto fail_wifi;
+    /* LR is for ESP-to-ESP traffic on STA. Keep the AP compatible with laptops. */
+    err = esp_wifi_set_protocol(WIFI_IF_STA,
+            WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N | WIFI_PROTOCOL_LR);
+    if (err != ESP_OK) goto fail_wifi;
     uint8_t mac[6];
     err = esp_wifi_get_mac(WIFI_IF_AP, mac);
     if (err != ESP_OK) goto fail_wifi;

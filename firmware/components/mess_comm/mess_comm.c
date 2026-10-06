@@ -14,15 +14,45 @@
 #include "linenoise/linenoise.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
+#include "freertos/task.h"
 
-typedef struct { uint8_t mac[6]; uint8_t data[200]; int length; } packet_t;
-static QueueHandle_t inbox, completion;
+typedef struct { uint8_t mac[6]; uint8_t data[200]; int length; int rssi; } packet_t;
+static QueueHandle_t inbox, history, completion;
 static bool ready, now_started;
 static bool pending;
+static void print_mac(const uint8_t mac[6], FILE *out);
+static void print_packet(const packet_t *packet, FILE *out)
+{
+    print_mac(packet->mac, out);
+    fprintf(out, " (%d bytes, RSSI %d dBm): ", packet->length, packet->rssi);
+    for (int i = 0; i < packet->length; ++i) {
+        unsigned c = packet->data[i];
+        if (c >= 32 && c <= 126) fputc(c, out); else fprintf(out, "\\x%02x", c);
+    }
+    fputc('\n', out);
+}
+static void receive_task(void *argument)
+{
+    (void)argument;
+    packet_t packet, discarded;
+    for (;;) {
+        if (xQueueReceive(inbox, &packet, portMAX_DELAY) != pdTRUE) continue;
+        /* Serialize printing with commands, never perform UART I/O in the radio callback. */
+        mess_commands_lock();
+        if (xQueueSend(history, &packet, 0) != pdTRUE) {
+            xQueueReceive(history, &discarded, 0);
+            xQueueSend(history, &packet, 0);
+        }
+        fputs("\n[ESP-NOW RX] ", stdout);
+        print_packet(&packet, stdout);
+        fflush(stdout);
+        mess_commands_unlock();
+    }
+}
 static void received(const esp_now_recv_info_t *info, const uint8_t *data, int length)
 {
     if (!info || !data || length < 1 || length > 200) return;
-    packet_t packet = {.length=length};
+    packet_t packet = {.length=length, .rssi=info->rx_ctrl ? info->rx_ctrl->rssi : 0};
     memcpy(packet.mac, info->src_addr, 6);
     memcpy(packet.data, data, length);
     /* Drop newest on full queue; never block the Wi-Fi task. */
@@ -39,17 +69,23 @@ esp_err_t mess_comm_start(void)
     esp_err_t err = mess_wifi_start();
     if (err != ESP_OK) return err;
     inbox = xQueueCreate(8, sizeof(packet_t));
+    history = xQueueCreate(8, sizeof(packet_t));
     completion = xQueueCreate(1, sizeof(esp_now_send_status_t));
-    if (!inbox || !completion) { err=ESP_ERR_NO_MEM; goto fail; }
+    if (!inbox || !history || !completion) { err=ESP_ERR_NO_MEM; goto fail; }
     err=esp_now_init(); if (err != ESP_OK) goto fail;
     now_started=true;
     err=esp_now_register_recv_cb(received); if (err != ESP_OK) goto fail;
     err=esp_now_register_send_cb(sent); if (err != ESP_OK) goto fail;
+    if (xTaskCreate(receive_task, "mess_receive", 3072, NULL, 3, NULL) != pdPASS) {
+        err=ESP_ERR_NO_MEM; goto fail;
+    }
     ready=true;
+    puts("ESP-NOW listening automatically on channel 1; long-range TX 250 Kbps. Enter comm to broadcast.");
     return ESP_OK;
 fail:
     if (now_started) { esp_now_deinit(); now_started=false; }
     if (inbox) { vQueueDelete(inbox); inbox=NULL; }
+    if (history) { vQueueDelete(history); history=NULL; }
     if (completion) { vQueueDelete(completion); completion=NULL; }
     return err;
 }
@@ -68,6 +104,13 @@ esp_err_t mess_comm_send(const uint8_t destination[6], const uint8_t *data, size
         esp_err_t err=esp_now_add_peer(&peer);
         if (err!=ESP_OK) return err;
     }
+    /* Enabling the LR protocol alone does not select a long-range transmit rate. */
+    esp_now_rate_config_t rate = {
+        .phymode = WIFI_PHY_MODE_LR,
+        .rate = WIFI_PHY_RATE_LORA_250K,
+    };
+    esp_err_t rate_err = esp_now_set_peer_rate_config(destination, &rate);
+    if (rate_err != ESP_OK) return rate_err;
     xQueueReset(completion);
     pending=true;
     esp_err_t err=esp_now_send(destination,data,length);
@@ -93,8 +136,8 @@ static void print_mac(const uint8_t mac[6], FILE *out)
 static void help(FILE *out)
 {
     fprintf(out, "%s\n", "status | channel N (1..11) | send MAC \"message\" | broadcast \"message\" | receive | exit");
-    fprintf(out, "%s\n", "Both boards: enter comm, choose same channel. Messages <=200 bytes, unencrypted.");
-    fprintf(out, "%s\n", "receive drains 8-packet inbox; new packets drop when full. Radio stays on after exit.");
+    fprintf(out, "%s\n", "All boards listen at boot on channel 1. Long-range 250 Kbps; messages <=200 bytes, unencrypted.");
+    fprintf(out, "%s\n", "Incoming messages print automatically on USB/UART, in any console mode. receive drains the last 8 messages.");
 }
 int mess_comm_run(int argc, char **argv, FILE *out)
 {
@@ -113,7 +156,7 @@ int mess_comm_run(int argc, char **argv, FILE *out)
             uint8_t mac[6],channel; wifi_second_chan_t secondary;
             err=esp_wifi_get_mac(WIFI_IF_STA,mac);
             if (err==ESP_OK) err=esp_wifi_get_channel(&channel,&secondary);
-            if (err==ESP_OK) { fprintf(out, "MAC "); print_mac(mac, out); fprintf(out, " channel %u; queued %u\n",channel,(unsigned)uxQueueMessagesWaiting(inbox)); }
+            if (err==ESP_OK) { fprintf(out, "MAC "); print_mac(mac, out); fprintf(out, " channel %u; LR 250 Kbps; automatic USB receive; history %u\n",channel,(unsigned)uxQueueMessagesWaiting(history)); }
         } else if (!strcmp(args[0],"channel") && n==2) {
             char *end; long channel=strtol(args[1],&end,10);
             if (*end || end==args[1] || channel<1 || channel>11) err=ESP_ERR_INVALID_ARG;
@@ -126,13 +169,8 @@ int mess_comm_run(int argc, char **argv, FILE *out)
             }
         } else if (!strcmp(args[0],"receive") && n==1) {
             packet_t packet; unsigned count=0;
-            while (count < 8 && xQueueReceive(inbox,&packet,0)==pdTRUE) {
-                print_mac(packet.mac, out); fprintf(out, " (%d bytes): ",packet.length);
-                for (int i=0;i<packet.length;++i) {
-                    unsigned c=packet.data[i];
-                    if (c>=32 && c<=126) fputc(c, out); else fprintf(out, "\\x%02x",c);
-                }
-                fprintf(out, "%s\n", ""); ++count;
+            while (count < 8 && xQueueReceive(history,&packet,0)==pdTRUE) {
+                print_packet(&packet, out); ++count;
             }
             if (!count) fprintf(out, "%s\n", "No queued messages.");
         } else if ((!strcmp(args[0],"send") && n==3) || (!strcmp(args[0],"broadcast") && n==2)) {
@@ -142,7 +180,7 @@ int mess_comm_run(int argc, char **argv, FILE *out)
             else {
                 const char *message=args[unicast?2:1];
                 err=mess_comm_send(mac,(const uint8_t *)message,strlen(message));
-                if (err==ESP_OK) fprintf(out, "%s\n", "Radio send completed; use receive on the other MCU to verify application receipt.");
+                if (err==ESP_OK) fprintf(out, "%s\n", "Long-range radio send completed; check listening MCUs for [ESP-NOW RX]. Broadcast has no delivery acknowledgement.");
             }
         } else help(out);
         if (err!=ESP_OK) fprintf(out, "Comm error: %s\n",esp_err_to_name(err));

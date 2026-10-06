@@ -13,6 +13,10 @@ void app_main(void)
     esp_err_t err = mess_i2c_init(CONFIG_MESS_I2C_SDA, CONFIG_MESS_I2C_SCL,
                                 CONFIG_MESS_I2C_FREQUENCY);
     if (err != ESP_OK) printf("I2C init: %s; comm remains available\n", esp_err_to_name(err));
+    err = mess_laptop_start();
+    if (err != ESP_OK) printf("Laptop Wi-Fi startup failed: %s; USB console remains available\n", esp_err_to_name(err));
+    err = mess_comm_start();
+    if (err != ESP_OK) printf("ESP-NOW startup failed: %s; USB console remains available\n", esp_err_to_name(err));
     esp_console_repl_t *repl = NULL;
     esp_console_repl_config_t config = ESP_CONSOLE_REPL_CONFIG_DEFAULT();
     config.prompt = "mess>";

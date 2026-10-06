@@ -185,7 +185,7 @@ static esp_err_t favicon_get(httpd_req_t *req)
     httpd_resp_set_status(req, "204 No Content");
     return httpd_resp_send(req, NULL, 0);
 }
-static esp_err_t start(void)
+esp_err_t mess_laptop_start(void)
 {
     esp_err_t err = mess_wifi_start();
     if (err != ESP_OK) return err;
@@ -250,7 +250,7 @@ static void help(void)
 int mess_laptop_console(int argc, char **argv)
 {
     (void)argc; (void)argv;
-    esp_err_t err = start();
+    esp_err_t err = mess_laptop_start();
     if (err != ESP_OK) { printf("Laptop Wi-Fi startup failed: %s\n", esp_err_to_name(err)); return 1; }
     help();
     for (;;) {
