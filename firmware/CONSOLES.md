@@ -1,6 +1,6 @@
 # MESS interactive consoles
 
-From normal PowerShell in the repository root, `./build_and_flash.ps1 -Port COM4 -Monitor` automatically activates ESP-IDF, builds, flashes and opens the MCU terminal. Replace COM4 with your board port. For manual build or monitor only, use `idf.py build` or `idf.py -p COM4 monitor` from `firmware` in an activated ESP-IDF terminal. The UART serial monitor shows `mess>`. Enter `i2ctools`, `comm`, or `wifi` to open a mode in the same terminal, and `exit` to return. `help` inside each mode prints usage.
+From normal PowerShell in the repository root, `./build_and_flash.ps1 -Port COM4 -Monitor` automatically activates ESP-IDF, flashes the existing build and opens the MCU terminal. Add `-Build` (alias `-b`) to build first; use `./build_and_flash.ps1 -Build` without a port to build only. Flashing without the build flag uses the generated flash metadata directly and never invokes an implicit build. Replace COM4 with your board port. For manual build or monitor only, use `idf.py build` or `idf.py -p COM4 monitor` from `firmware` in an activated ESP-IDF terminal. The UART serial monitor shows `mess>`. Enter `i2ctools`, `comm`, or `wifi` to open a mode in the same terminal, and `exit` to return. `help` inside each mode prints usage.
 
 ## I2C
 

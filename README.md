@@ -12,13 +12,13 @@ Run the script from normal PowerShell in `C:/MESS`, passing your board's serial 
 .\build_and_flash.ps1 -Port COM10
 ```
 
-This builds and flashes the combined firmware. To also open the MCU terminal afterward:
+This flashes the existing firmware build without rebuilding. Use `-Build` (alias `-b`) to build first:
 
 ```powershell
-.\build_and_flash.ps1 -Port COM10 -Monitor
+.\build_and_flash.ps1 -Build -Port COM10 -Monitor
 ```
 
-Replace COM10 with your board's port. The script reuses an active ESP-IDF environment or automatically loads the installed environment from `C:/Espressif/tools/eim_idf.json`. It uses the local VS Code ESP-IDF selection when available. ESP-IDF itself must already be installed.
+Use `.\build_and_flash.ps1 -Build` to build only, or `.\build_and_flash.ps1 -b -Port COM10` to build and flash. To flash the same image to several boards, build once, then run with only `-Port` for each board. Replace COM10 with your board's port. The script reuses an active ESP-IDF environment or automatically loads the installed environment from `C:/Espressif/tools/eim_idf.json`. It uses the local VS Code ESP-IDF selection when available. ESP-IDF itself must already be installed.
 
 Check setup without building or flashing:
 
@@ -26,12 +26,12 @@ Check setup without building or flashing:
 .\build_and_flash.ps1 -CheckEnvironment
 ```
 
-`-Monitor` opens the USB/UART MCU terminal at 115200 baud after flashing. Exit with Ctrl+]. Close an existing monitor before flashing so the serial port is free. Omit `-Monitor` to build and flash only.
+`-Monitor` opens the USB/UART MCU terminal at 115200 baud after flashing. Exit with Ctrl+]. Close an existing monitor before flashing so the serial port is free. Omit `-Monitor` to flash without opening the terminal. Building is opt-in: `-Build` or `-b` builds first; with no `-Port`, it builds only. Flashing fails with guidance if the existing build is missing.
 
 For a different installation, pass `-ActivationScript 'path/to/activation.ps1'` or set `MESS_IDF_ACTIVATE`. If PowerShell blocks script execution, run:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\build_and_flash.ps1 -Port COM4 -Monitor
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\build_and_flash.ps1 -Build -Port COM4 -Monitor
 ```
 
 To monitor an already flashed board without rebuilding, use `idf.py -p COM4 monitor` from `firmware` in an activated ESP-IDF terminal. The repository has one standalone script: `build_and_flash.ps1`.
