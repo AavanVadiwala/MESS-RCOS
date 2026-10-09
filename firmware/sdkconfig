@@ -821,13 +821,6 @@ CONFIG_COMPILER_CXX_GLIBCXX_CONSTEXPR_NO_CHANGE=y
 #
 
 #
-# Console Library
-#
-# default:
-# CONFIG_CONSOLE_SORTED_HELP is not set
-# end of Console Library
-
-#
 # eFuse Bit Manager
 #
 # default:
@@ -868,17 +861,6 @@ CONFIG_ESP_ERR_TO_NAME_LOOKUP=y
 # end of ESP-Driver:GPIO Configurations
 
 #
-# ESP-Driver:I2C Configurations
-#
-# default:
-# CONFIG_I2C_ISR_IRAM_SAFE is not set
-# default:
-# CONFIG_I2C_ENABLE_DEBUG_LOG is not set
-# default:
-CONFIG_I2C_MASTER_ISR_HANDLER_IN_IRAM=y
-# end of ESP-Driver:I2C Configurations
-
-#
 # ESP-Driver:UART Configurations
 #
 # default:
@@ -908,29 +890,6 @@ CONFIG_ESP_EVENT_POST_FROM_ISR_SIZE=4
 # default:
 CONFIG_ESP_EVENT_POST_FROM_IRAM_ISR=y
 # end of Event Loop Library
-
-#
-# HTTP Server
-#
-# default:
-CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024
-# default:
-CONFIG_HTTPD_MAX_URI_LEN=512
-# default:
-CONFIG_HTTPD_ERR_RESP_NO_DELAY=y
-# default:
-CONFIG_HTTPD_PURGE_BUF_LEN=32
-# default:
-# CONFIG_HTTPD_LOG_PURGE_DATA is not set
-# default:
-# CONFIG_HTTPD_WS_SUPPORT is not set
-# default:
-# CONFIG_HTTPD_QUEUE_WORK_BLOCKING is not set
-# default:
-CONFIG_HTTPD_ENABLE_EVENTS=y
-# default:
-CONFIG_HTTPD_SERVER_EVENT_POST_TIMEOUT=2000
-# end of HTTP Server
 
 #
 # Hardware Settings
@@ -2817,17 +2776,6 @@ CONFIG_VFS_SEMIHOSTFS_MAX_MOUNT_POINTS=1
 # default:
 CONFIG_VFS_INITIALIZE_DEV_NULL=y
 # end of Virtual file system
-
-#
-# MESS I2C
-#
-# default:
-CONFIG_MESS_I2C_SDA=21
-# default:
-CONFIG_MESS_I2C_SCL=22
-# default:
-CONFIG_MESS_I2C_FREQUENCY=100000
-# end of MESS I2C
 # end of Component config
 
 # default:

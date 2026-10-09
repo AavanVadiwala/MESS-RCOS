@@ -1,58 +1,40 @@
-# MESS
+# MESS MCU scanner
 
-This branch makes building and flashing an ESP32 easier and brings tools adapted from several ESP-IDF examples into a single firmware image. The goal is one flash containing I2C tools, networking, and mesh tools, accessible through a common MCU terminal.
+ESP-IDF v6.1 firmware for the original ESP32. Every board automatically broadcasts
+an ESP-NOW announcement at 250 Kbps Espressif Long Range on channel 1, approximately
+every 1-2 seconds with random jitter. It listens for announcements matching the
+exact firmware ELF hash and refreshes its UART monitor list every three seconds.
+No commands are required.
 
-This branch includes `i2ctools`, long-range ESP-NOW board-to-board communication (250 Kbps), and a Wi-Fi hotspot with a browser terminal. All boards listen at boot and print incoming ESP-NOW messages automatically on USB/UART. Mesh relaying is not implemented. Uses ESP-IDF v6.1.
+Example monitor output:
 
-## Install and open the terminal
-
-Run the script from normal PowerShell in `C:/MESS`, passing your board's serial port. You do not need to open or manually activate an ESP-IDF terminal:
-
-```powershell
-.\build_and_flash.ps1 -Port COM10
+```text
+Nearby MCUs (same firmware; channel 1):
+MCU aa:bb:cc:dd:ee:01 : TX rate 250 Kbps (configured) | RSSI -55 dBm
+MCU aa:bb:cc:dd:ee:02 : TX rate 250 Kbps (configured) | RSSI -72 dBm
 ```
 
-This flashes the existing firmware build without rebuilding. Use `-Build` (alias `-b`) to build first:
+The MAC address identifies each MCU. RSSI is the latest received announcement's
+signal strength. The displayed rate is the configured physical transmission rate,
+not measured throughput. Distance cannot be measured by this firmware. Boards
+expire after six seconds without a received announcement; up to 32 are listed.
+Discovery is one-hop, best effort, unencrypted, and not identity authentication.
+Matching firmware hashes do not authenticate a sender. There is no hotspot,
+browser server, I2C interface, chat console, mesh forwarding, or router connection.
+
+Build once, then flash that same image onto every board:
 
 ```powershell
-.\build_and_flash.ps1 -Build -Port COM10 -Monitor
+.\build_and_flash.ps1 -Build
+.\build_and_flash.ps1 -Port COM10 -Monitor
 ```
 
-Use `.\build_and_flash.ps1 -Build` to build only, or `.\build_and_flash.ps1 -b -Port COM10` to build and flash. To flash the same image to several boards, build once, then run with only `-Port` for each board. Replace COM10 with your board's port. The script reuses an active ESP-IDF environment or automatically loads the installed environment from `C:/Espressif/tools/eim_idf.json`. It uses the local VS Code ESP-IDF selection when available. ESP-IDF itself must already be installed.
+Replace COM10 with each board's port. Exit monitor with Ctrl+]. To monitor without
+flashing, use `idf.py -p COM10 monitor` from `firmware` in an activated ESP-IDF
+terminal. Separately rebuilt images may have different hashes and will not appear.
+The project retains the output name `hello_world.bin`.
 
-Check setup without building or flashing:
-
-```powershell
-.\build_and_flash.ps1 -CheckEnvironment
-```
-
-`-Monitor` opens the USB/UART MCU terminal at 115200 baud after flashing. Exit with Ctrl+]. Close an existing monitor before flashing so the serial port is free. Omit `-Monitor` to flash without opening the terminal. Building is opt-in: `-Build` or `-b` builds first; with no `-Port`, it builds only. Flashing fails with guidance if the existing build is missing.
-
-For a different installation, pass `-ActivationScript 'path/to/activation.ps1'` or set `MESS_IDF_ACTIVATE`. If PowerShell blocks script execution, run:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\build_and_flash.ps1 -Build -Port COM4 -Monitor
-```
-
-To monitor an already flashed board without rebuilding, use `idf.py -p COM4 monitor` from `firmware` in an activated ESP-IDF terminal. The repository has one standalone script: `build_and_flash.ps1`.
-
-At `mess>` choose `i2ctools`, `comm`, or `wifi`. Each accepts `help` and `exit`. See [firmware/CONSOLES.md](firmware/CONSOLES.md) for commands and testing.
-
-## Components
-
-- `mess_i2c`: reusable I2C bus operations.
-- `mess_i2ctools`: interactive I2C commands.
-- `mess_wifi`: shared AP+station radio initialization, hotspot, status and channel control.
-- `mess_comm`: existing ESP-NOW communication using the shared station interface.
-- `mess_laptop`: raw-line UDP broadcasts and a browser message viewer.
-- `mess_commands`: serializes hardware commands from the browser and USB terminals.
-
-The Wi-Fi hotspot, browser terminal, and ESP-NOW listener start automatically at boot. Both wireless modes share channel 1 by default. The station interface supports Espressif LR and each ESP-NOW destination, including broadcast, is explicitly configured for 250 Kbps LR transmission. The hotspot keeps ordinary Wi-Fi compatibility. This is one-hop communication, not mesh networking; range must be verified at your site.
-
-Flash this same firmware onto each ESP32. In one board's USB terminal, enter `comm`, then `broadcast "hello from this board"`. All other listening boards in radio range on the same channel print `[ESP-NOW RX]` with the sender MAC, RSSI, and message, even while sitting at `mess>`. `receive` optionally replays the last eight messages, including from the browser terminal. Incoming messages can interrupt the visual USB prompt; the line being typed is retained. Broadcast delivery is best effort, without acknowledgements or automatic retries.
-
-In `comm`, run `discover` to find directly reachable boards on the current channel running the exact same firmware image. It sends 10 probes over about five seconds and lists each responding board's MAC address, last reply RSSI in dBm, and successful probe replies out of 10. This is a short round-trip link-quality sample, not an identity check or guaranteed delivery rate. Responders run automatically at boot; other boards do not need to enter a command. Flash all boards from the same built image: an older image or a separately rebuilt image with a different ELF hash is excluded. Discovery does not scan router SSIDs, change channels, or relay through intermediate nodes. Results are capped at 32 boards; missing replies may result from interference, congestion, or range. In the browser terminal use `comm discover`.
-
-Wi-Fi and HTTP setup use patterns from Espressif's Public Domain/CC0 examples in `C:/test_mc/esp-idf`: `wifi/getting_started/softAP`, `protocols/http_server/simple`, and `protocols/sockets/udp_client`. MESS adds its own shared lifecycle, terminal commands, history, and viewer.
-
-Use `discover live` inside `comm` for USB updates about every six seconds, and `discover stop` to stop. Other boards answer automatically without running a command. Each row shows MAC, last reply RSSI, probe reply percentage, and the configured 250 Kbps radio rate. Distance is explicitly unavailable; RSSI does not establish distance, and configured rate is not a throughput measurement. Live mode keeps running after exiting `comm` until stopped or rebooted; stopping can wait for the current scan to finish.
+Validation with two boards: flash the same image to both, confirm each monitor
+lists the other MAC and RSSI, power one off and confirm it disappears after about
+6-9 seconds, then power it on and confirm it reappears. A board running a different
+image must not appear. Hardware range and reception require physical verification.
