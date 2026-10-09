@@ -76,8 +76,15 @@ board, and `poll i2cconfig` changes their bus configuration until reboot.
 ```
 
 Build once and flash the same image onto every board (replace COM10). Exit the
-monitor with Ctrl+]. To monitor only, run `idf.py -p COM10 monitor` from `firmware`
-in an activated ESP-IDF terminal. Output remains `hello_world.bin`.
+monitor with Ctrl+]. To monitor an already flashed board without flashing again:
+
+```powershell
+.\build_and_flash.ps1 -Port COM10 -MonitorOnly
+```
+
+The script invokes ESP-IDF through its selected Python environment explicitly,
+avoiding Windows `.py` file associations and Conda's Python selection. Output
+remains `hello_world.bin`.
 
 With two boards, run `poll i2cdetect` and verify one local section and one remote
 section against direct `i2cdetect` results. Attach different known I2C devices

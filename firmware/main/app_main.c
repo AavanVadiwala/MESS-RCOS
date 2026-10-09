@@ -171,19 +171,35 @@ static esp_err_t change_rate(unsigned rate)
     xSemaphoreGive(transmit_lock);
     return err;
 }
+typedef struct { char *data; size_t used; bool truncated; } capture_t;
+static ssize_t capture_write(void *cookie, const char *data, size_t length)
+{
+    capture_t *capture = cookie;
+    size_t available = MAX_OUTPUT - capture->used;
+    size_t copied = length < available ? length : available;
+    memcpy(capture->data + capture->used, data, copied);
+    capture->used += copied;
+    capture->data[capture->used] = 0;
+    if (copied != length) capture->truncated = true;
+    return length;
+}
 static char *execute(const char *command, int *result, size_t *length)
 {
-    char *output = NULL;
-    FILE *stream = open_memstream(&output, length);
-    if (!stream) { *result = ESP_ERR_NO_MEM; *length = 0; return NULL; }
+    /* Avoid the installed open_memstream's flush at an allocation boundary.
+     * A bounded cookie stream never reallocates or writes beyond MAX_OUTPUT. */
+    capture_t capture = {.data = calloc(MAX_OUTPUT + 1, 1)};
+    if (!capture.data) { *result = ESP_ERR_NO_MEM; *length = 0; return NULL; }
+    cookie_io_functions_t functions = {.write = capture_write};
+    FILE *stream = fopencookie(&capture, "w", functions);
+    if (!stream) { free(capture.data); *result = ESP_ERR_NO_MEM; *length = 0; return NULL; }
     *result = i2ctools_run_line(command, stream);
-    if (fclose(stream) != 0) { free(output); *length = 0; *result = ESP_FAIL; return NULL; }
-    if (*length > MAX_OUTPUT) {
+    if (fclose(stream) != 0) { free(capture.data); *length = 0; *result = ESP_FAIL; return NULL; }
+    *length = capture.used;
+    if (capture.truncated) {
         const char marker[] = "\n[output truncated]\n";
-        memcpy(output + MAX_OUTPUT - sizeof(marker) + 1, marker, sizeof(marker) - 1);
-        output[MAX_OUTPUT] = 0; *length = MAX_OUTPUT;
+        memcpy(capture.data + MAX_OUTPUT - sizeof(marker) + 1, marker, sizeof(marker) - 1);
     }
-    return output;
+    return capture.data;
 }
 static void responder(void *argument)
 {

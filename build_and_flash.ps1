@@ -3,6 +3,7 @@ param(
     [Alias('b')]
     [switch]$Build,
     [switch]$Monitor,
+    [switch]$MonitorOnly,
     [switch]$CheckEnvironment,
     [string]$ActivationScript = $env:MESS_IDF_ACTIVATE
 )
@@ -12,12 +13,18 @@ $env:PYTHONUTF8 = '1'
 # Use the native Windows toolchain even when launched from Git Bash.
 Remove-Item Env:MSYSTEM -ErrorAction SilentlyContinue
 try {
-    if (-not $CheckEnvironment -and [string]::IsNullOrWhiteSpace($Port) -and (-not $Build -or $Monitor)) {
-        throw 'Specify -Port COM4 to flash an existing build, -Build to build only, or -Build -Port COM4 to build and flash. -Monitor requires -Port.'
+    if ($MonitorOnly -and ($Build -or $Monitor)) {
+        throw 'Use -Port COM13 -MonitorOnly without -Build or -Monitor to monitor an already flashed board.'
+    }
+    if (-not $CheckEnvironment -and [string]::IsNullOrWhiteSpace($Port) -and (-not $Build -or $Monitor -or $MonitorOnly)) {
+        throw 'Specify -Port COM4 to flash, -Build to build only, or -Build -Port COM4 to build and flash. -Monitor and -MonitorOnly require -Port.'
     }
 
     # Reuse an activated terminal, or locate the EIM-installed environment.
-    if ($ActivationScript -or -not (Get-Command idf.py -ErrorAction SilentlyContinue)) {
+    $activeIdf = $env:IDF_PATH -and $env:IDF_PYTHON_ENV_PATH -and
+        (Test-Path -LiteralPath (Join-Path $env:IDF_PATH 'tools/idf.py') -PathType Leaf) -and
+        (Test-Path -LiteralPath (Join-Path $env:IDF_PYTHON_ENV_PATH 'Scripts/python.exe') -PathType Leaf)
+    if ($ActivationScript -or -not $activeIdf) {
         if (-not $ActivationScript) {
             $registryPath = 'C:/Espressif/tools/eim_idf.json'
             if (-not (Test-Path -LiteralPath $registryPath)) {
@@ -45,8 +52,16 @@ try {
         . $ActivationScript
     }
 
-    if (-not (Get-Command idf.py -ErrorAction SilentlyContinue)) {
-        throw 'Activation did not provide idf.py. Check your ESP-IDF installation.'
+    if (-not $env:IDF_PATH -or -not $env:IDF_PYTHON_ENV_PATH) {
+        throw 'Activation did not provide IDF_PATH and IDF_PYTHON_ENV_PATH. Check your ESP-IDF installation.'
+    }
+    # Invoke the selected environment explicitly. Bare idf.py can resolve through
+    # Windows file associations/aliases; bare python can select Conda instead.
+    $idfPython = Join-Path $env:IDF_PYTHON_ENV_PATH 'Scripts/python.exe'
+    $idfEntryPoint = Join-Path $env:IDF_PATH 'tools/idf.py'
+    if (-not (Test-Path -LiteralPath $idfPython -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $idfEntryPoint -PathType Leaf)) {
+        throw 'The selected ESP-IDF Python executable or tools/idf.py is missing.'
     }
     $projectPath = Join-Path $PSScriptRoot 'firmware'
     if (-not (Test-Path -LiteralPath (Join-Path $projectPath 'CMakeLists.txt'))) {
@@ -55,14 +70,14 @@ try {
     Push-Location $projectPath
     try {
         if ($CheckEnvironment) {
-            & idf.py --version
+            & $idfPython $idfEntryPoint --version
             if ($LASTEXITCODE -ne 0) { throw "ESP-IDF check failed ($LASTEXITCODE)." }
         } else {
             if ($Build) {
-                & idf.py build
+                & $idfPython $idfEntryPoint build
                 if ($LASTEXITCODE -ne 0) { throw "Build failed ($LASTEXITCODE); flashing was not started." }
             }
-            if (-not [string]::IsNullOrWhiteSpace($Port)) {
+            if (-not [string]::IsNullOrWhiteSpace($Port) -and -not $MonitorOnly) {
                 $buildPath = Join-Path $projectPath 'build'
                 $flashConfigPath = Join-Path $buildPath 'flasher_args.json'
                 if (-not (Test-Path -LiteralPath $flashConfigPath -PathType Leaf)) {
@@ -87,15 +102,15 @@ try {
                 # idf.py flash implicitly builds; use generated metadata directly to avoid that.
                 Push-Location $buildPath
                 try {
-                    & python @flashArguments
+                    & $idfPython @flashArguments
                     if ($LASTEXITCODE -ne 0) { throw "Flash failed ($LASTEXITCODE)." }
                 } finally {
                     Pop-Location
                 }
-                if ($Monitor) {
-                    & idf.py -p $Port monitor
-                    if ($LASTEXITCODE -ne 0) { throw "Monitor failed ($LASTEXITCODE)." }
-                }
+            }
+            if ($Monitor -or $MonitorOnly) {
+                & $idfPython $idfEntryPoint -p $Port monitor
+                if ($LASTEXITCODE -ne 0) { throw "Monitor failed ($LASTEXITCODE)." }
             }
         }
     } finally {
