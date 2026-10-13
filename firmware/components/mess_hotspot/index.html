@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MESS readings</title>
+<style>
+body{font:15px system-ui,sans-serif;margin:24px;color:#18202b;background:#f7f8fa}
+h1{margin-bottom:8px}p{color:#566071}.scroll{overflow:auto}
+table{border-collapse:collapse;width:100%;background:white}
+th,td{padding:10px;text-align:left;border-bottom:1px solid #dde2e8;white-space:nowrap}
+th{background:#e9edf3}td.reading{white-space:normal;min-width:240px}
+</style>
+<h1>MESS readings</h1>
+<p id="state" role="status">Loading readings…</p>
+<p>Measurement time is the original MCU’s uptime in microseconds. UUID = original MAC + measurement time.
+Session distinguishes MCU restarts. The table keeps the most recent 256 accepted readings in memory.</p>
+<div class="scroll"><table>
+<thead><tr><th>UUID</th><th>Original MAC</th><th>Sensor</th><th>Measurement time (µs)</th>
+<th>Session</th><th>Sequence</th><th>Reading</th><th>Via</th><th>Relay hops</th><th>Link RSSI</th></tr></thead>
+<tbody id="rows"></tbody></table></div>
+<script>
+async function refresh(){
+  try{
+    const response=await fetch('/api/readings',{cache:'no-store',signal:AbortSignal.timeout(5000)});
+    if(!response.ok)throw new Error('Connection error');
+    const data=await response.json(),fragment=document.createDocumentFragment();
+    for(const row of data.rows.reverse()){
+      const tr=document.createElement('tr');
+      for(const key of ['uuid','mac','sensor','time_us','session','sequence','reading','via','hops','rssi']){
+        const td=document.createElement('td');
+        td.textContent=key==='rssi'?(row.rssi===null?'—':row.rssi+' dBm'):row[key];
+        if(key==='reading')td.className='reading';
+        tr.appendChild(td);
+      }
+      fragment.appendChild(tr);
+    }
+    document.getElementById('rows').replaceChildren(fragment);
+    document.getElementById('state').textContent=data.rows.length+' readings shown · '+data.total+
+      ' accepted since boot · Updated '+new Date().toLocaleTimeString();
+  }catch(error){document.getElementById('state').textContent='Connection lost. Reconnect to the MESS hotspot; retrying…';}
+  setTimeout(refresh,1000);
+}
+refresh();
+</script>
+</html>
