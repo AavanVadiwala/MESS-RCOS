@@ -1,0 +1,55 @@
+Command: cmake -G Ninja -B C:\Users\Steadl2\OneDrive\Documents\GitHub\MESS-RCOS\firmwareBH1750\build -DPYTHON_DEPS_CHECKED=1 -DPYTHON=C:\Espressif\tools\python\v6.1\venv\Scripts\python.exe -DESP_PLATFORM=1 -DIDF_TARGET=esp32 -DCCACHE_ENABLE=True C:\Users\Steadl2\OneDrive\Documents\GitHub\MESS-RCOS\firmwareBH1750
+-- Found Git: C:/Users/Steadl2/AppData/Local/Programs/Git/cmd/git.exe (found version "2.52.0.windows.1")
+-- Minimal build - ON
+-- ccache will be used for faster recompilation
+-- The C compiler identification is GNU 15.2.0
+-- The CXX compiler identification is GNU 15.2.0
+-- The ASM compiler identification is GNU
+-- Found assembler: C:/Espressif/tools/xtensa-esp-elf/esp-15.2.0_20251204/xtensa-esp-elf/bin/xtensa-esp32-elf-gcc.exe
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: C:/Espressif/tools/xtensa-esp-elf/esp-15.2.0_20251204/xtensa-esp-elf/bin/xtensa-esp32-elf-gcc.exe - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: C:/Espressif/tools/xtensa-esp-elf/esp-15.2.0_20251204/xtensa-esp-elf/bin/xtensa-esp32-elf-g++.exe - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Building ESP-IDF components for target esp32
+-- KCONFIG_REPORT_VERBOSITY not set, using default
+-- Project sdkconfig file C:/Users/Steadl2/OneDrive/Documents/GitHub/MESS-RCOS/firmwareBH1750/sdkconfig
+-- Compiler supported targets: xtensa-esp-elf
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- App "firmwareBH1750" version: 8c81de2
+-- Found Python3: C:/Espressif/tools/python/v6.1/venv/Scripts/python.exe (found version "3.11.15") found components: Interpreter
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+-- Found Threads: TRUE
+-- Performing Test C_COMPILER_SUPPORTS_WFORMAT_SIGNEDNESS
+-- Performing Test C_COMPILER_SUPPORTS_WFORMAT_SIGNEDNESS - Success
+-- Setting up mbedtls configuration
+-- Linkage type is PUBLIC
+-- Adding linker script C:/esp/v6.1/esp-idf/components/esp_system/ld/esp32/memory.ld.in
+--   -> Preprocessing .in script: C:/esp/v6.1/esp-idf/components/esp_system/ld/esp32/memory.ld.in
+-- Adding linker script C:/esp/v6.1/esp-idf/components/esp_system/ld/esp32/sections.ld.in
+--   -> Preprocessing .in script: C:/esp/v6.1/esp-idf/components/esp_system/ld/esp32/sections.ld.in
+--   -> Applying ldgen processing: C:/Users/Steadl2/OneDrive/Documents/GitHub/MESS-RCOS/firmwareBH1750/build/esp-idf/esp_system/ld/sections.ld.in
+-- Adding linker script C:/esp/v6.1/esp-idf/components/esp_rom/esp32/ld/esp32.rom.ld
+-- Adding linker script C:/esp/v6.1/esp-idf/components/esp_rom/esp32/ld/esp32.rom.api.ld
+-- Adding linker script C:/esp/v6.1/esp-idf/components/esp_rom/esp32/ld/esp32.rom.libgcc.ld
+-- Adding linker script C:/esp/v6.1/esp-idf/components/esp_rom/esp32/ld/esp32.rom.libc-funcs.ld
+-- Adding linker script C:/esp/v6.1/esp-idf/components/esp_hal_regi2c/esp32/rom.regi2c.ld
+-- Adding linker script C:/esp/v6.1/esp-idf/components/soc/esp32/ld/esp32.peripherals.ld
+-- Components: app_update bootloader bootloader_support cxx efuse esp_app_format esp_blockdev esp_bootloader_format esp_common esp_driver_dma esp_driver_gpio esp_driver_i2c esp_hal_ana_conv esp_hal_clock esp_hal_dma esp_hal_gpio esp_hal_gpspi esp_hal_i2c esp_hal_i2s esp_hal_mspi esp_hal_pmu esp_hal_regi2c esp_hal_rtc_timer esp_hal_security esp_hal_systimer esp_hal_timg esp_hal_touch_sens esp_hal_uart esp_hal_usb esp_hal_wdt esp_hw_support esp_libc esp_mm esp_partition esp_pm esp_ringbuf esp_rom esp_security esp_stdio esp_system esp_timer esp_usb_cdc_rom_console esptool_py freertos hal heap log main mbedtls partition_table pthread soc spi_flash xtensa
+-- Component paths: C:/esp/v6.1/esp-idf/components/app_update C:/esp/v6.1/esp-idf/components/bootloader C:/esp/v6.1/esp-idf/components/bootloader_support C:/esp/v6.1/esp-idf/components/cxx C:/esp/v6.1/esp-idf/components/efuse C:/esp/v6.1/esp-idf/components/esp_app_format C:/esp/v6.1/esp-idf/components/esp_blockdev C:/esp/v6.1/esp-idf/components/esp_bootloader_format C:/esp/v6.1/esp-idf/components/esp_common C:/esp/v6.1/esp-idf/components/esp_driver_dma C:/esp/v6.1/esp-idf/components/esp_driver_gpio C:/esp/v6.1/esp-idf/components/esp_driver_i2c C:/esp/v6.1/esp-idf/components/esp_hal_ana_conv C:/esp/v6.1/esp-idf/components/esp_hal_clock C:/esp/v6.1/esp-idf/components/esp_hal_dma C:/esp/v6.1/esp-idf/components/esp_hal_gpio C:/esp/v6.1/esp-idf/components/esp_hal_gpspi C:/esp/v6.1/esp-idf/components/esp_hal_i2c C:/esp/v6.1/esp-idf/components/esp_hal_i2s C:/esp/v6.1/esp-idf/components/esp_hal_mspi C:/esp/v6.1/esp-idf/components/esp_hal_pmu C:/esp/v6.1/esp-idf/components/esp_hal_regi2c C:/esp/v6.1/esp-idf/components/esp_hal_rtc_timer C:/esp/v6.1/esp-idf/components/esp_hal_security C:/esp/v6.1/esp-idf/components/esp_hal_systimer C:/esp/v6.1/esp-idf/components/esp_hal_timg C:/esp/v6.1/esp-idf/components/esp_hal_touch_sens C:/esp/v6.1/esp-idf/components/esp_hal_uart C:/esp/v6.1/esp-idf/components/esp_hal_usb C:/esp/v6.1/esp-idf/components/esp_hal_wdt C:/esp/v6.1/esp-idf/components/esp_hw_support C:/esp/v6.1/esp-idf/components/esp_libc C:/esp/v6.1/esp-idf/components/esp_mm C:/esp/v6.1/esp-idf/components/esp_partition C:/esp/v6.1/esp-idf/components/esp_pm C:/esp/v6.1/esp-idf/components/esp_ringbuf C:/esp/v6.1/esp-idf/components/esp_rom C:/esp/v6.1/esp-idf/components/esp_security C:/esp/v6.1/esp-idf/components/esp_stdio C:/esp/v6.1/esp-idf/components/esp_system C:/esp/v6.1/esp-idf/components/esp_timer C:/esp/v6.1/esp-idf/components/esp_usb_cdc_rom_console C:/esp/v6.1/esp-idf/components/esptool_py C:/esp/v6.1/esp-idf/components/freertos C:/esp/v6.1/esp-idf/components/hal C:/esp/v6.1/esp-idf/components/heap C:/esp/v6.1/esp-idf/components/log C:/Users/Steadl2/OneDrive/Documents/GitHub/MESS-RCOS/firmwareBH1750/main C:/esp/v6.1/esp-idf/components/mbedtls C:/esp/v6.1/esp-idf/components/partition_table C:/esp/v6.1/esp-idf/components/pthread C:/esp/v6.1/esp-idf/components/soc C:/esp/v6.1/esp-idf/components/spi_flash C:/esp/v6.1/esp-idf/components/xtensa
+-- Configuring done (33.1s)
+-- Generating done (1.2s)
+-- Build files have been written to: C:/Users/Steadl2/OneDrive/Documents/GitHub/MESS-RCOS/firmwareBH1750/build
