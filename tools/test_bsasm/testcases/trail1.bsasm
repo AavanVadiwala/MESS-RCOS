@@ -1,3 +1,0 @@
-#Example bitscrambler program. Does nothing but forward all bytes.
-
-cfg trailing_bytes 1			#End program as soon as the input EOFs.

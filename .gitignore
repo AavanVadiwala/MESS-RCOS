@@ -1,4 +1,8 @@
-firmware/build*/
-firmware/sdkconfig
-firmware/sdkconfig.old
-firmware/*.log
+# ESP-IDF build output and generated config (any project folder)
+**/build*/
+**/sdkconfig
+**/sdkconfig.old
+**/*.log
+
+# Per-machine editor settings
+.vscode/
