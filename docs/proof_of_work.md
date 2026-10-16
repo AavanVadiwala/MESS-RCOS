@@ -12,7 +12,7 @@
 ## 1. Team and Role
 *Commit 1 — `docs: add team and role intro (<name>)`*
 
-**Team:** <e.g. Sensors / Mesh / Server & UI>
+**Team:**
 
 **What my team is responsible for:**
 *1–3 sentences. What part of MESS does your team own, and which milestone items does it cover? (See the MESS Milestones and Goals doc.)*
