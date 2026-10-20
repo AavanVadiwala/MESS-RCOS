@@ -1,6 +1,0 @@
-"-specs=C:/Users/Steadl2/OneDrive/Documents/GitHub/MESS-RCOS/firmwareBH1750/build/specs/picolibc.specs"
--Wno-frame-address
--mlongcalls
--fno-builtin-memcpy
--fno-builtin-memset
--fno-builtin-bzero
