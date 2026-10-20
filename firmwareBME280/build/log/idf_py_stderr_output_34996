@@ -1,4 +1,0 @@
-Command: cmake -G Ninja -B C:\Users\Steadl2\OneDrive\Documents\GitHub\MESS-RCOS\firmwareBH1750\build -DPYTHON_DEPS_CHECKED=1 -DPYTHON=C:\Espressif\tools\python\v6.1\venv\Scripts\python.exe -DESP_PLATFORM=1 -DIDF_TARGET=esp32 -DCCACHE_ENABLE=True C:\Users\Steadl2\OneDrive\Documents\GitHub\MESS-RCOS\firmwareBH1750
-NOTE: Kconfig parser version: 1
-NOTE: Kconfig defaults policy: use sdkconfig
-NOTE: Status: Finished successfully

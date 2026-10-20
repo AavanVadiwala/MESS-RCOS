@@ -160,9 +160,25 @@ void app_main(void)
         i2c_new_master_bus(&bus_config, &bus_handle)
     );
 
+    // Check whether a device responds at either common BME280 address.
+    esp_err_t err76 = i2c_master_probe(bus_handle, 0x76, 1000);
+    esp_err_t err77 = i2c_master_probe(bus_handle, 0x77, 1000);
+
+    printf("Probe 0x76: %s\n", esp_err_to_name(err76));
+    printf("Probe 0x77: %s\n", esp_err_to_name(err77));
+
+    // Stop here if neither address responds.
+    if (err76 != ESP_OK && err77 != ESP_OK) {
+        printf("No device found at 0x76 or 0x77. Check wiring.\n");
+        return;
+    }
+
+    // Select the responding address.
+    uint8_t address = (err76 == ESP_OK) ? 0x76 : 0x77;
+
     i2c_device_config_t device_config = {
         .dev_addr_length = I2C_ADDR_BIT_LEN_7,
-        .device_address = BME280_ADDRESS,
+        .device_address = address,
         .scl_speed_hz = 100000
     };
 
@@ -176,52 +192,69 @@ void app_main(void)
         )
     );
 
-    // Verify we're actually talking to a BME280.
+    // Read the sensor's chip ID.
     uint8_t chip_id = 0;
-    ESP_ERROR_CHECK(bme280_read(sensor_handle, BME280_REG_ID, &chip_id, 1));
-    if (chip_id != BME280_CHIP_ID)
-    {
-        printf("Unexpected chip ID 0x%02X (expected 0x%02X).%s\n",
-               chip_id, BME280_CHIP_ID,
-               chip_id == 0x58 ? " That's a BMP280, which has no humidity sensor." : "");
+    esp_err_t err = bme280_read(
+        sensor_handle, BME280_REG_ID, &chip_id, 1
+    );
+
+    printf("Chip ID read: %s, value: 0x%02X\n",
+           esp_err_to_name(err), chip_id);
+
+    if (err != ESP_OK) {
+        printf("Could not read chip ID. Check sensor communication.\n");
         return;
     }
 
-    // Soft reset, then give the sensor time to load its NVM data.
-    ESP_ERROR_CHECK(bme280_write(sensor_handle, BME280_REG_RESET, 0xB6));
+    if (chip_id != BME280_CHIP_ID) {
+        printf("Unexpected chip ID: 0x%02X (expected 0x%02X)\n",
+               chip_id, BME280_CHIP_ID);
+        return;
+    }
+
+    printf("BME280 detected successfully!\n");
+
+    // Reset the sensor.
+    ESP_ERROR_CHECK(
+        bme280_write(sensor_handle, BME280_REG_RESET, 0xB6)
+    );
     vTaskDelay(pdMS_TO_TICKS(10));
 
+    // Read factory calibration coefficients.
     ESP_ERROR_CHECK(bme280_read_calibration(sensor_handle));
 
-    // Humidity oversampling x1 (must be written before ctrl_meas).
+    // Configure humidity, filter, oversampling, and normal mode.
     ESP_ERROR_CHECK(bme280_write(sensor_handle, BME280_REG_CTRL_HUM, 0x01));
-    // Standby 1000 ms, IIR filter x4.
     ESP_ERROR_CHECK(bme280_write(sensor_handle, BME280_REG_CONFIG, 0xA8));
-    // Temp oversampling x2, pressure oversampling x16, normal mode.
     ESP_ERROR_CHECK(bme280_write(sensor_handle, BME280_REG_CTRL_MEAS, 0x57));
 
     printf("BME280 sensor started!\n");
 
+    // Keep your existing while (1) loop here, unchanged.
     while (1)
     {
         vTaskDelay(pdMS_TO_TICKS(1000));
 
         uint8_t d[8];
-        esp_err_t result = bme280_read(sensor_handle, BME280_REG_DATA,
-                                       d, sizeof(d));
+        esp_err_t result = bme280_read(
+            sensor_handle, BME280_REG_DATA, d, sizeof(d)
+        );
 
         if (result == ESP_OK)
         {
-            int32_t adc_P = ((int32_t)d[0] << 12) | ((int32_t)d[1] << 4) | (d[2] >> 4);
-            int32_t adc_T = ((int32_t)d[3] << 12) | ((int32_t)d[4] << 4) | (d[5] >> 4);
+            int32_t adc_P = ((int32_t)d[0] << 12) |
+                            ((int32_t)d[1] << 4) | (d[2] >> 4);
+            int32_t adc_T = ((int32_t)d[3] << 12) |
+                            ((int32_t)d[4] << 4) | (d[5] >> 4);
             int32_t adc_H = ((int32_t)d[6] << 8) | d[7];
 
-            // Temperature must be computed first: it sets t_fine.
             float temp_c = compensate_temperature(adc_T) / 100.0f;
-            float pressure_hpa = compensate_pressure(adc_P) / 256.0f / 100.0f;
+            float pressure_hpa =
+                compensate_pressure(adc_P) / 256.0f / 100.0f;
             float humidity = compensate_humidity(adc_H) / 1024.0f;
 
-            printf("Temperature: %.2f C, Humidity: %.2f %%RH, Pressure: %.2f hPa\n",
+            printf("Temperature: %.2f C, Humidity: %.2f %%RH, "
+                   "Pressure: %.2f hPa\n",
                    temp_c, humidity, pressure_hpa);
         }
         else
