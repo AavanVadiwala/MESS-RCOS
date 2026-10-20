@@ -14,6 +14,11 @@ MESS/
     CMakeLists.txt    Project configuration
     sdkconfig         ESP-IDF settings
     sdkconfig.defaults
+  software/               
+    web/   data viewer web application 
+    db/     postgresql database
+    dockerfile.YAML docker file to start everything for the server
+    README.md How to use 
   LICENSE
   README.md
   build_and_flash.ps1
