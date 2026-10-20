@@ -18,15 +18,18 @@ esp_err_t bh1750_init(void)
 {
     if (sensor_handle) return ESP_OK;
 
-    i2c_master_bus_config_t bus_config = {
-        .i2c_port = BH1750_I2C_PORT,
-        .sda_io_num = BH1750_SDA_PIN,
-        .scl_io_num = BH1750_SCL_PIN,
-        .clk_source = I2C_CLK_SRC_DEFAULT,
-        .glitch_ignore_cnt = 7,
-        .flags.enable_internal_pullup = true,
-    };
-    esp_err_t error = i2c_new_master_bus(&bus_config, &bus_handle);
+    esp_err_t error = i2c_master_get_bus_handle(BH1750_I2C_PORT, &bus_handle);
+    if (error == ESP_ERR_INVALID_STATE) {
+        i2c_master_bus_config_t bus_config = {
+            .i2c_port = BH1750_I2C_PORT,
+            .sda_io_num = BH1750_SDA_PIN,
+            .scl_io_num = BH1750_SCL_PIN,
+            .clk_source = I2C_CLK_SRC_DEFAULT,
+            .glitch_ignore_cnt = 7,
+            .flags.enable_internal_pullup = true,
+        };
+        error = i2c_new_master_bus(&bus_config, &bus_handle);
+    }
     if (error != ESP_OK) return error;
 
     i2c_device_config_t device_config = {
@@ -35,11 +38,7 @@ esp_err_t bh1750_init(void)
         .scl_speed_hz = 100000,
     };
     error = i2c_master_bus_add_device(bus_handle, &device_config, &sensor_handle);
-    if (error != ESP_OK) {
-        i2c_del_master_bus(bus_handle);
-        bus_handle = NULL;
-        return error;
-    }
+    if (error != ESP_OK) return error;
     return ESP_OK;
 }
 
