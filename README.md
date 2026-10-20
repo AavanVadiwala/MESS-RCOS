@@ -26,7 +26,7 @@ Hidden Git files remain for version control. There is no records or tests folder
 | Part | What it does |
 |---|---|
 | `main/app_main.c` | Starts the mesh, calls sensor initialization stubs, reads each sensor once per second, and queues its result for broadcasting. |
-| `components/bme280` | Placeholder for temperature, pressure, and humidity readings. Returns `BME280` for field testing. |
+| `components/bme280` | Reads temperature (C), pressure (Pa) and humidity (%RH) over I2C. Its Kconfig sets the shared I2C pins (default SDA 21, SCL 22). |
 | `components/sgp30` | Placeholder for CO2-equivalent and TVOC readings. Returns `SGP30` for field testing. |
 | `components/bh1750` | Placeholder for light readings. Returns `BH1750` for field testing. |
 | `components/sensor_types` | Common result containing status, numeric values, and an optional field-test name. |
@@ -44,20 +44,21 @@ uptime. Remote output distinguishes the original MCU from the immediate relay.
 
 ## Field testing and remaining work
 
-Sensors do not need to be connected or initialized for field testing. Their
-hardware drivers remain unimplemented. Every second the placeholders broadcast:
+Sensors do not need to be connected for field testing. The SGP30 and BH1750
+drivers remain unimplemented. Every second a board broadcasts, for example:
 
 ```text
-sensor=bme280 status=placeholder value=BME280
+sensor=bme280 status=ESP_OK C=24.8 Pa=101940 %RH=42.5
 sensor=sgp30 status=placeholder value=SGP30
 sensor=bh1750 status=placeholder value=BH1750
 ```
 
-These names test transmission and relaying; they are not physical measurements.
+The placeholder names test transmission and relaying; they are not physical
+measurements. Without a BME280 attached, its line reports the I2C error and
+`value=null`; reset the board after connecting the sensor.
 
 | Sensor | What needs to be implemented |
 |---|---|
-| BME280 | I2C setup, chip identification, calibration, conversion timing, and temperature (C), pressure (Pa), humidity (%RH). |
 | SGP30 | I2C setup, air-quality initialization and warm-up, response checks, baseline/humidity handling, CO2-equivalent (ppm) and TVOC (ppb). Read once per second. |
 | BH1750 | I2C setup, measurement mode, conversion timing, and conversion to lux. |
 
