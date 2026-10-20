@@ -44,26 +44,24 @@ uptime. Remote output distinguishes the original MCU from the immediate relay.
 
 ## Field testing and remaining work
 
-Sensors do not need to be connected or initialized for field testing. Their
-hardware drivers remain unimplemented. Every second the placeholders broadcast:
+The SGP30 driver is still a placeholder and broadcasts this field-test record
+every second:
 
 ```text
-sensor=bme280 status=placeholder value=BME280
 sensor=sgp30 status=placeholder value=SGP30
-sensor=bh1750 status=placeholder value=BH1750
 ```
 
-These names test transmission and relaying; they are not physical measurements.
+This name tests transmission and relaying; it is not a physical measurement.
 
-| Sensor | What needs to be implemented |
+| Sensor | Status and remaining work |
 |---|---|
-| BME280 | I2C setup, chip identification, calibration, conversion timing, and temperature (C), pressure (Pa), humidity (%RH). |
+| BME280 | Reads temperature (C), pressure (Pa), and humidity (%RH) over I2C0 on SDA GPIO 21 / SCL GPIO 22. Supports addresses `0x76` and `0x77`; verify wiring on the target hardware. |
 | SGP30 | I2C setup, air-quality initialization and warm-up, response checks, baseline/humidity handling, CO2-equivalent (ppm) and TVOC (ppb). Read once per second. |
-| BH1750 | I2C setup, measurement mode, conversion timing, and conversion to lux. |
+| BH1750 | Reads single-shot high-resolution illuminance in lux using the shared I2C0 bus. |
 
-Implement a shared synchronized I2C bus, initialization retries and recovery.
-When implementing each driver, clear `field_test_name` and return real readings
-with their status and value count.
+The BME280 initializes I2C0 when needed; the BH1750 reuses that bus. I2C
+transactions are serialized by ESP-IDF. Initialization retries and bus recovery
+remain outstanding.
 
 The mesh is implemented with best-effort delivery; acknowledgements and retries
 are not implemented. Physical radio operation still needs testing. To check
