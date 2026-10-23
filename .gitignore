@@ -3,6 +3,14 @@
 **/sdkconfig
 **/sdkconfig.old
 **/*.log
+hd-test/esp-idf
+
 
 # Per-machine editor settings
 .vscode/
+
+# credentials
+**/.env
+
+#node artifacts
+node_modules/
