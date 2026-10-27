@@ -1,7 +1,6 @@
 #include "mess_hotspot.h"
 #include <inttypes.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include "esp_http_server.h"
 #include "esp_netif.h"
@@ -17,12 +16,14 @@ typedef struct {
     bool local;
     uint64_t received_us, number;
 } row_t;
+_Static_assert(MESS_HOTSPOT_HISTORY >= 3 * 3 * 5, "History must hold at least 45 readings");
 static row_t history[MESS_HOTSPOT_HISTORY];
+/* HTTP handlers run serially on the server task. Fixed storage avoids per-request
+ * heap allocation and keeps slow clients from blocking collection. */
+static row_t snapshot[MESS_HOTSPOT_HISTORY];
 static uint64_t total;
 static SemaphoreHandle_t history_lock;
 static httpd_handle_t server;
-extern const unsigned char index_start[] asm("_binary_index_html_start");
-extern const unsigned char index_end[] asm("_binary_index_html_end");
 
 static void mac_text(const uint8_t mac[6], char text[18])
 {
@@ -44,12 +45,6 @@ void mess_hotspot_collect(const mess_mesh_record_t *record,
     xSemaphoreGive(history_lock);
 }
 
-static esp_err_t page(httpd_req_t *request)
-{
-    httpd_resp_set_type(request, "text/html");
-    return httpd_resp_send(request, (const char *)index_start, index_end - index_start - 1);
-}
-
 /* Protocol text is printable ASCII; JSON still requires escaping quotes and slashes. */
 static void escape_text(const char *input, size_t length, char *output)
 {
@@ -65,22 +60,21 @@ static esp_err_t readings(httpd_req_t *request)
 {
     xSemaphoreTake(history_lock, portMAX_DELAY);
     uint64_t end = total;
+    size_t count = end < MESS_HOTSPOT_HISTORY ? (size_t)end : MESS_HOTSPOT_HISTORY;
+    uint64_t begin = end - count;
+    for (size_t i = 0; i < count; ++i)
+        snapshot[i] = history[(begin + i) % MESS_HOTSPOT_HISTORY];
     xSemaphoreGive(history_lock);
-    uint64_t begin = end > MESS_HOTSPOT_HISTORY ? end - MESS_HOTSPOT_HISTORY : 0;
     char opening[160];
-    snprintf(opening, sizeof(opening), "{\"total\":\"%" PRIu64 "\",\"capacity\":%u,\"rows\":[",
-        end, MESS_HOTSPOT_HISTORY);
+    snprintf(opening, sizeof(opening), "{\"total\":\"%" PRIu64 "\",\"capacity\":%u,\"count\":%u,\"rows\":[",
+        end, MESS_HOTSPOT_HISTORY, (unsigned)count);
     httpd_resp_set_type(request, "application/json");
     httpd_resp_set_hdr(request, "Cache-Control", "no-store");
     esp_err_t error = httpd_resp_sendstr_chunk(request, opening);
     if (error != ESP_OK) return error;
     bool first = true;
-    for (uint64_t number = begin; number < end; ++number) {
-        row_t row;
-        xSemaphoreTake(history_lock, portMAX_DELAY);
-        row = history[number % MESS_HOTSPOT_HISTORY];
-        xSemaphoreGive(history_lock);
-        if (row.number != number) continue; /* Replaced while streaming; never mix rows. */
+    for (size_t i = 0; i < count; ++i) {
+        const row_t row = snapshot[i];
         char mac[18], relay[18], uuid[64], timestamp[32], session[32], received[32];
         mac_text(row.record.origin, mac); mac_text(row.relay, relay);
         snprintf(timestamp, sizeof(timestamp), "%" PRIu64, row.record.measured_us);
@@ -143,11 +137,11 @@ esp_err_t mess_hotspot_start(void)
     config.stack_size = 6144;
     esp_err_t error = httpd_start(&server, &config);
     if (error != ESP_OK) return error;
-    const httpd_uri_t home = {.uri = "/", .method = HTTP_GET, .handler = page};
+    const httpd_uri_t home = {.uri = "/", .method = HTTP_GET, .handler = readings};
     const httpd_uri_t api = {.uri = "/api/readings", .method = HTTP_GET, .handler = readings};
     error = httpd_register_uri_handler(server, &home);
     if (error == ESP_OK) error = httpd_register_uri_handler(server, &api);
     if (error != ESP_OK) { httpd_stop(server); server = NULL; return error; }
-    printf("MESS hotspot password: %s | Table: http://192.168.4.1/\n", MESS_HOTSPOT_PASSWORD);
+    printf("MESS hotspot password: %s | JSON: http://192.168.4.1:80/\n", MESS_HOTSPOT_PASSWORD);
     return ESP_OK;
 }
