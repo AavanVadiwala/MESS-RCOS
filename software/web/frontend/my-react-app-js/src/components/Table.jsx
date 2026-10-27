@@ -1,4 +1,4 @@
-import data from "../../../../web/public/dummy_data.json";
+import data from "../../../../public/dummy_data.json";
 
 // apparently vite parses json files by default sooooooo
 function Table() {
