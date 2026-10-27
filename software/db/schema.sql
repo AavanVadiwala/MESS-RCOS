@@ -1,6 +1,55 @@
--- Dummy schema so the database initializes. Replace with the real one.
-CREATE TABLE IF NOT EXISTS dummy (
-    id         SERIAL PRIMARY KEY,
-    name       TEXT NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+
+-- Create tables for sensor data
+CREATE TABLE IF NOT EXISTS light_data (
+    id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    recorded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    light_value REAL NOT NULL,
+    sensor_id INTEGER NOT NULL,
+    loc TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS gas_data (
+    id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    recorded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    gas_value REAL NOT NULL,
+    sensor_id INTEGER NOT NULL,
+    loc TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS humid_data (
+    id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    recorded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    humid_value REAL NOT NULL,
+    sensor_id INTEGER NOT NULL,
+    loc TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS temp_data (
+    id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    recorded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    temp_value REAL NOT NULL,
+    sensor_id INTEGER NOT NULL,
+    loc TEXT NOT NULL
+);
+
+-- Tables matching POST /data (see web/public/dummy_data.json)
+CREATE TABLE IF NOT EXISTS bme280_data (
+    id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    time TIMESTAMPTZ NOT NULL DEFAULT now(),
+    temperature REAL,
+    humidity REAL,
+    pressure REAL
+);
+
+CREATE TABLE IF NOT EXISTS sgp30_data (
+    id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    time TIMESTAMPTZ NOT NULL DEFAULT now(),
+    eco2 REAL,
+    tvoc REAL
+);
+
+CREATE TABLE IF NOT EXISTS bh1750_data (
+    id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    time TIMESTAMPTZ NOT NULL DEFAULT now(),
+    lux REAL
 );
