@@ -1,4 +1,4 @@
-import data from "../../../../software/web/public/dummy_data.json";
+import data from "../../../../web/public/dummy_data.json";
 
 // apparently vite parses json files by default sooooooo
 function Table() {
@@ -6,6 +6,7 @@ function Table() {
   // just request that the data from each sensor is read seperately
   // table currently hardcoded, make it dynamic later
 
+  // time is used as the key due to it being unique, also a bit more reliable
   const listitem = data.bme280.readings.map((r) => (
     <tr key={r.time}>
       <th>{r.time}</th>
