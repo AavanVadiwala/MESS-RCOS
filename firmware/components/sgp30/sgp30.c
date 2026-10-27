@@ -1,4 +1,7 @@
+
 #include <stdio.h>
+#include "sgp30.h"
+#include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/i2c_master.h"
@@ -15,6 +18,9 @@
 #define SGP30_CMD_GET_FEATURE_SET    0x202F
 #define SGP30_CMD_INIT_AIR_QUALITY   0x2003
 #define SGP30_CMD_MEASURE_AIR_QUALITY 0x2008
+
+static i2c_master_bus_handle_t bus_handle;
+static i2c_master_dev_handle_t sensor_handle;
 
 // Every 16-bit word the SGP30 returns is followed by a CRC-8
 // (polynomial 0x31, initial value 0xFF).
@@ -85,90 +91,92 @@ static esp_err_t sgp30_read_words(i2c_master_dev_handle_t sensor_handle,
     return ESP_OK;
 }
 
-void app_main(void)
+esp_err_t sgp30_init(void)
 {
-    i2c_master_bus_handle_t bus_handle;
+    if (sensor_handle) return ESP_OK;
 
-    i2c_master_bus_config_t bus_config = {
-        .i2c_port = I2C_PORT,
-        .sda_io_num = SDA_PIN,
-        .scl_io_num = SCL_PIN,
-        .clk_source = I2C_CLK_SRC_DEFAULT,
-        .glitch_ignore_cnt = 7,
-        .flags.enable_internal_pullup = true
-    };
-
-    ESP_ERROR_CHECK(
-        i2c_new_master_bus(&bus_config, &bus_handle)
-    );
+    // The bus is shared with the other I2C sensors; create it only if
+    // nobody has yet.
+    esp_err_t error = i2c_master_get_bus_handle(I2C_PORT, &bus_handle);
+    if (error == ESP_ERR_INVALID_STATE)
+    {
+        i2c_master_bus_config_t bus_config = {
+            .i2c_port = I2C_PORT,
+            .sda_io_num = SDA_PIN,
+            .scl_io_num = SCL_PIN,
+            .clk_source = I2C_CLK_SRC_DEFAULT,
+            .glitch_ignore_cnt = 7,
+            .flags.enable_internal_pullup = true
+        };
+        error = i2c_new_master_bus(&bus_config, &bus_handle);
+    }
+    if (error != ESP_OK) return error;
 
     i2c_device_config_t device_config = {
         .dev_addr_length = I2C_ADDR_BIT_LEN_7,
         .device_address = SGP30_ADDRESS,
         .scl_speed_hz = 100000
     };
-
-    i2c_master_dev_handle_t sensor_handle;
-
-    ESP_ERROR_CHECK(
-        i2c_master_bus_add_device(
-            bus_handle,
-            &device_config,
-            &sensor_handle
-        )
-    );
+    i2c_master_dev_handle_t handle;
+    error = i2c_master_bus_add_device(bus_handle, &device_config, &handle);
+    if (error != ESP_OK) return error;
 
     // Read the serial number and feature set to confirm the sensor is there.
     uint16_t serial[3];
-
-    ESP_ERROR_CHECK(
-        sgp30_read_words(sensor_handle, SGP30_CMD_GET_SERIAL_ID, 1, serial, 3)
-    );
-
-    printf("SGP30 serial: %04X%04X%04X\n", serial[0], serial[1], serial[2]);
-
     uint16_t feature_set;
-
-    ESP_ERROR_CHECK(
-        sgp30_read_words(sensor_handle, SGP30_CMD_GET_FEATURE_SET, 10,
-                         &feature_set, 1)
-    );
-
-    printf("SGP30 feature set: 0x%04X\n", feature_set);
+    error = sgp30_read_words(handle, SGP30_CMD_GET_SERIAL_ID, 1, serial, 3);
+    if (error == ESP_OK)
+    {
+        error = sgp30_read_words(handle, SGP30_CMD_GET_FEATURE_SET, 10,
+                                 &feature_set, 1);
+    }
 
     // Start the air quality algorithm. Measurements must then be
-    // requested once per second to keep its baseline accurate.
-    ESP_ERROR_CHECK(
-        sgp30_send_command(sensor_handle, SGP30_CMD_INIT_AIR_QUALITY)
-    );
-
+    // requested once per second to keep its baseline accurate. The first
+    // ~15 readings are fixed at 400 ppm / 0 ppb while it warms up.
+    if (error == ESP_OK)
+    {
+        error = sgp30_send_command(handle, SGP30_CMD_INIT_AIR_QUALITY);
+    }
+    if (error != ESP_OK)
+    {
+        printf("SGP30 init failed: %s\n", esp_err_to_name(error));
+        i2c_master_bus_rm_device(handle);
+        return error;
+    }
     vTaskDelay(pdMS_TO_TICKS(10));
 
+    printf("SGP30 serial: %04X%04X%04X\n", serial[0], serial[1], serial[2]);
+    printf("SGP30 feature set: 0x%04X\n", feature_set);
     printf("SGP30 air quality sensor started!\n");
     printf("The first ~15 readings are fixed at 400 ppm / 0 ppb while it warms up.\n");
 
-    while (1)
+    sensor_handle = handle;
+    return ESP_OK;
+}
+
+esp_err_t sgp30_read(sensor_reading_t *reading)
+{
+    if (!reading) return ESP_ERR_INVALID_ARG;
+    *reading = (sensor_reading_t){.status = ESP_FAIL};
+    if (!sensor_handle) return reading->status = ESP_ERR_INVALID_STATE;
+
+    uint16_t values[2];
+    esp_err_t error = sgp30_read_words(sensor_handle,
+                                       SGP30_CMD_MEASURE_AIR_QUALITY, 12,
+                                       values, 2);
+    if (error != ESP_OK)
     {
-        vTaskDelay(pdMS_TO_TICKS(1000));
-
-        uint16_t values[2];
-
-        esp_err_t result = sgp30_read_words(
-            sensor_handle,
-            SGP30_CMD_MEASURE_AIR_QUALITY,
-            12,
-            values,
-            2
-        );
-
-        if (result == ESP_OK)
-        {
-            printf("eCO2: %u ppm, TVOC: %u ppb\n", values[0], values[1]);
-        }
-        else
-        {
-            printf("Sensor read failed: %s\n",
-                   esp_err_to_name(result));
-        }
+        printf("SGP30 read failed: %s\n", esp_err_to_name(error));
+        return reading->status = error;
     }
+
+    printf("eCO2: %u ppm, TVOC: %u ppb\n", values[0], values[1]);
+
+    *reading = (sensor_reading_t){
+        .status = ESP_OK,
+        .count = 2,
+        .values = {values[0], values[1]},
+    };
+    return ESP_OK;
 }
