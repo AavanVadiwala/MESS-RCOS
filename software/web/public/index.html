@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>placeholder</title>
+</head>
+<body>
+  <h1>placeholder</h1>
+  <pre id="data">waiting for data...</pre>
+
+  <script>
+    const API_URL = 'dummy_data.json';
+    const out = document.getElementById('data');
+    async function load() {
+      try {
+        const res = await fetch(API_URL);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        out.textContent = JSON.stringify(data, null, 2);
+      } catch (err) {
+        out.textContent = `error: ${err.message}`;
+      }
+    }
+
+    load();
+  </script>
+</body>
+</html>
