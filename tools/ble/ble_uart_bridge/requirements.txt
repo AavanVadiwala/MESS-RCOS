@@ -1,6 +1,0 @@
-bleak
-fastapi
-uvicorn
-typer
-loguru
-textual
