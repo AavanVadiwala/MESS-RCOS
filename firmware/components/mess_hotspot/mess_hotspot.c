@@ -67,9 +67,17 @@ static esp_err_t readings(httpd_req_t *request)
     uint64_t end = total;
     xSemaphoreGive(history_lock);
     uint64_t begin = end > MESS_HOTSPOT_HISTORY ? end - MESS_HOTSPOT_HISTORY : 0;
-    char opening[160];
-    snprintf(opening, sizeof(opening), "{\"total\":\"%" PRIu64 "\",\"capacity\":%u,\"rows\":[",
-        end, MESS_HOTSPOT_HISTORY);
+    /* ?after=N skips rows already fetched (N is the "total" from the previous response). */
+    char query[48], value[24];
+    if (httpd_req_get_url_query_str(request, query, sizeof(query)) == ESP_OK &&
+        httpd_query_key_value(query, "after", value, sizeof(value)) == ESP_OK) {
+        uint64_t after = strtoull(value, NULL, 10);
+        if (after > begin) begin = after < end ? after : end;
+    }
+    /* now_us lets the page turn received_us (this board's uptime) into clock time. */
+    char opening[192];
+    snprintf(opening, sizeof(opening), "{\"total\":\"%" PRIu64 "\",\"capacity\":%u,\"now_us\":\"%" PRIu64 "\",\"rows\":[",
+        end, MESS_HOTSPOT_HISTORY, (uint64_t)esp_timer_get_time());
     httpd_resp_set_type(request, "application/json");
     httpd_resp_set_hdr(request, "Cache-Control", "no-store");
     esp_err_t error = httpd_resp_sendstr_chunk(request, opening);
@@ -148,6 +156,6 @@ esp_err_t mess_hotspot_start(void)
     error = httpd_register_uri_handler(server, &home);
     if (error == ESP_OK) error = httpd_register_uri_handler(server, &api);
     if (error != ESP_OK) { httpd_stop(server); server = NULL; return error; }
-    printf("MESS hotspot password: %s | Table: http://192.168.4.1/\n", MESS_HOTSPOT_PASSWORD);
+    printf("MESS hotspot password: %s | Live graphs: http://192.168.4.1/\n", MESS_HOTSPOT_PASSWORD);
     return ESP_OK;
 }

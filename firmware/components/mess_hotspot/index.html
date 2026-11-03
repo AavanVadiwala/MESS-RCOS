@@ -1,45 +1,190 @@
 <!doctype html>
 <html lang="en">
+<head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MESS readings</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MESS Live</title>
 <style>
-body{font:15px system-ui,sans-serif;margin:24px;color:#18202b;background:#f7f8fa}
-h1{margin-bottom:8px}p{color:#566071}.scroll{overflow:auto}
-table{border-collapse:collapse;width:100%;background:white}
-th,td{padding:10px;text-align:left;border-bottom:1px solid #dde2e8;white-space:nowrap}
-th{background:#e9edf3}td.reading{white-space:normal;min-width:240px}
+  :root { --ink:#000; --muted:#555; --rule:#ccc; --grid:#e4e4e4; --bg:#fff;
+          --s0:#2563eb; --s1:#dc2626; --s2:#16a34a; --s3:#9333ea; --s4:#ea580c; --s5:#0891b2; --s6:#a16207; --s7:#db2777; }
+  @media (prefers-color-scheme: dark) { :root { --ink:#eee; --muted:#aaa; --rule:#444; --grid:#2a2a2a; --bg:#111;
+          --s0:#60a5fa; --s1:#f87171; --s2:#4ade80; --s3:#c084fc; --s4:#fb923c; --s5:#22d3ee; --s6:#facc15; --s7:#f472b6; } }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:Arial,Helvetica,sans-serif; }
+  main { max-width:1100px; margin:0 auto; padding:20px 16px 40px; }
+  h1 { margin:0 0 4px; font-size:28px; }
+  .lede,.hint,footer { color:var(--muted); font-size:13px; }
+  .banner { border:2px solid var(--ink); padding:12px; margin:16px 0; }
+  .banner.stale { border-style:dashed; }
+  .table-wrap { overflow-x:auto; margin-bottom:16px; border:1px solid var(--rule); }
+  table { border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums; }
+  th, td { text-align:left; padding:8px 12px; border-bottom:1px solid var(--rule); white-space:nowrap; }
+  th { font-size:12px; color:var(--muted); font-weight:normal; }
+  td.num { font-size:18px; font-weight:bold; }
+  tr:last-child td { border-bottom:none; }
+  tr.silent td { color:var(--muted); }
+  .swatch { display:inline-block; width:22px; height:0; border-top:3px solid; vertical-align:middle; margin-right:6px; }
+  .legend { display:flex; flex-wrap:wrap; gap:4px 14px; font-size:12px; color:var(--muted); margin-bottom:4px; }
+  .controls { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+  button { font:inherit; font-size:13px; background:var(--bg); color:var(--ink); border:1px solid var(--ink); padding:6px 12px; cursor:pointer; }
+  button[aria-pressed="true"] { background:var(--ink); color:var(--bg); }
+  .panel { border:1px solid var(--rule); padding:14px; margin-bottom:16px; }
+  .panel h2 { margin:0; font-size:18px; }
+  .panel .hint { margin:2px 0 8px; }
+  svg { display:block; width:100%; height:200px; overflow:visible; }
+  svg text { fill:var(--muted); font-size:11px; font-variant-numeric:tabular-nums; }
 </style>
-<h1>MESS readings</h1>
-<p id="state" role="status">Loading readings…</p>
-<p>Measurement time is the original MCU’s uptime in microseconds. UUID = original MAC + measurement time.
-Session distinguishes MCU restarts. The table keeps the most recent 256 accepted readings in memory.</p>
-<div class="scroll"><table>
-<thead><tr><th>UUID</th><th>Original MAC</th><th>Sensor</th><th>Measurement time (µs)</th>
-<th>Session</th><th>Sequence</th><th>Reading</th><th>Via</th><th>Relay hops</th><th>Link RSSI</th></tr></thead>
-<tbody id="rows"></tbody></table></div>
+</head>
+<body>
+<main>
+  <h1>MESS Live</h1>
+  <p class="lede">Served by this MESS board. It shows every BME280 reading this board has received over the mesh, its own and those relayed from other boards. No internet is involved.</p>
+  <div id="banner" class="banner">Connecting to the board…</div>
+  <div class="controls" role="group" aria-label="Time range">
+    <button data-seconds="60" aria-pressed="false">1 minute</button>
+    <button data-seconds="300" aria-pressed="true">5 minutes</button>
+    <button data-seconds="600" aria-pressed="false">10 minutes</button>
+  </div>
+  <div class="table-wrap">
+    <table aria-label="Sensors">
+      <thead><tr><th>Board</th><th>Temperature</th><th>Humidity</th><th>Pressure</th><th>Signal</th><th>Hops</th><th>Received</th><th>Last reading</th></tr></thead>
+      <tbody id="sensor-rows"><tr><td colspan="8" class="hint">No BME280 readings yet.</td></tr></tbody>
+    </table>
+  </div>
+  <section class="panel"><h2>Temperature</h2><p class="hint">°C · nearby board heat can raise this</p><div id="c-temperature_c"></div></section>
+  <section class="panel"><h2>Relative humidity</h2><p class="hint">%RH · breathe on a sensor to see it rise</p><div id="c-humidity_pct"></div></section>
+  <section class="panel"><h2>Pressure</h2><p class="hint">hPa · local absolute pressure, not sea-level corrected</p><div id="c-pressure_hpa"></div></section>
+  <footer>Each board is named by the last four characters of its MAC address and keeps its colour on every graph. "This board" is the one serving this page; signal is the last relay link for readings from other boards. History builds up while this page is open (up to 10 minutes); the board itself keeps only its latest 256 records. Gaps mean no reading arrived; no values are filled in. SGP30 and BH1750 placeholders are not graphed.</footer>
+</main>
 <script>
-async function refresh(){
-  try{
-    const response=await fetch('/api/readings',{cache:'no-store',signal:AbortSignal.timeout(5000)});
-    if(!response.ok)throw new Error('Connection error');
-    const data=await response.json(),fragment=document.createDocumentFragment();
-    for(const row of data.rows.reverse()){
-      const tr=document.createElement('tr');
-      for(const key of ['uuid','mac','sensor','time_us','session','sequence','reading','via','hops','rssi']){
-        const td=document.createElement('td');
-        td.textContent=key==='rssi'?(row.rssi===null?'—':row.rssi+' dBm'):row[key];
-        if(key==='reading')td.className='reading';
-        tr.appendChild(td);
-      }
-      fragment.appendChild(tr);
-    }
-    document.getElementById('rows').replaceChildren(fragment);
-    document.getElementById('state').textContent=data.rows.length+' readings shown · '+data.total+
-      ' accepted since boot · Updated '+new Date().toLocaleTimeString();
-  }catch(error){document.getElementById('state').textContent='Connection lost. Reconnect to the MESS hotspot; retrying…';}
-  setTimeout(refresh,1000);
+const FIELDS = {temperature_c: {unit: '°C', digits: 2}, humidity_pct: {unit: '%RH', digits: 1}, pressure_hpa: {unit: 'hPa', digits: 2}};
+const SILENT_S = 5, KEEP_S = 600;
+const READING = /status=ESP_OK C=(-?[\d.]+) Pa=([\d.]+) %RH=([\d.]+)/;
+/* One entry per origin board: {t: [], temperature_c: [], humidity_pct: [], pressure_hpa: [], rssi, hops, received, local}. */
+const nodes = new Map();
+const colours = new Map(); /* board -> palette slot */
+const link = {after: '0', reached: 0, ok: false};
+let span = 300;
+
+const ago = s => s < 90 ? Math.round(s) + ' s' : Math.round(s / 60) + ' min';
+const fmtTime = t => new Date(t * 1000).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: '2-digit'});
+const signalWord = dbm => dbm >= -60 ? 'strong' : dbm >= -75 ? 'fair' : 'weak';
+const label = id => '…' + id.slice(-4);
+
+function colour(id) {
+  if (!colours.has(id)) colours.set(id, colours.size);
+  const slot = colours.get(id);
+  return {stroke: `var(--s${slot % 8})`, dash: slot < 8 ? '' : '6 3'};
 }
-refresh();
+const swatch = id => `<span class="swatch" style="border-color:${colour(id).stroke};border-top-style:${colour(id).dash ? 'dashed' : 'solid'}"></span>`;
+
+function sortedIds() {
+  const ids = [...nodes.keys()].sort();
+  ids.forEach(colour); /* new boards get the next colours, alphabetically */
+  return ids.sort((a, b) => colours.get(a) - colours.get(b));
+}
+
+function niceTicks(lo, hi, n) {
+  const raw = (hi - lo) / n, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(s => s >= raw);
+  const out = [];
+  for (let v = Math.ceil(lo / step) * step; v <= hi + step * 1e-9; v += step) out.push(+v.toFixed(10));
+  return {ticks: out, step};
+}
+
+function drawChart(field, now) {
+  const box = document.getElementById('c-' + field);
+  const t0 = now - span;
+  const lines = [];
+  for (const id of sortedIds()) {
+    const s = nodes.get(id), idx = s.t.map((t, i) => i).filter(i => s.t[i] >= t0);
+    if (idx.length) lines.push({id, s, idx});
+  }
+  if (!lines.length) { box.innerHTML = '<p class="hint">No readings in this range yet.</p>'; return; }
+  const W = box.clientWidth || 600, H = 200, L = 64, R = 8, T = 12, B = 24;
+  const ys = lines.flatMap(l => l.idx.map(i => l.s[field][i]));
+  let lo = Math.min(...ys), hi = Math.max(...ys);
+  if (hi - lo < 0.05) { const mid = (hi + lo) / 2; lo = mid - 0.05; hi = mid + 0.05; }
+  const pad = (hi - lo) * 0.08; lo -= pad; hi += pad;
+  const x = t => L + (t - t0) / span * (W - L - R);
+  const y = v => T + (hi - v) / (hi - lo) * (H - T - B);
+  const yt = niceTicks(lo, hi, 4), digits = Math.max(0, -Math.floor(Math.log10(yt.step)));
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${field} for ${lines.length} board(s) over the last ${ago(span)}">`;
+  for (const v of yt.ticks) svg += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v.toFixed(digits)}</text>`;
+  for (let k = 0; k <= 4; k++) { const t = t0 + k * span / 4; svg += `<text x="${x(t)}" y="${H - 6}" text-anchor="middle">${fmtTime(t)}</text>`; }
+  for (const {id, s, idx} of lines) {
+    let d = '', prev = null;
+    for (const i of idx) {
+      d += (prev === null || s.t[i] - prev > SILENT_S ? 'M' : 'L') + x(s.t[i]).toFixed(1) + ',' + y(s[field][i]).toFixed(1);
+      prev = s.t[i];
+    }
+    const c = colour(id), last = idx[idx.length - 1];
+    svg += `<path d="${d}" fill="none" stroke="${c.stroke}" stroke-dasharray="${c.dash}" stroke-width="1.8" stroke-linejoin="round"/>`;
+    svg += `<circle cx="${x(s.t[last])}" cy="${y(s[field][last])}" r="3.5" fill="${c.stroke}"/>`;
+  }
+  const legend = lines.length > 1 ? '<div class="legend">' + lines.map(({id}) => `<span>${swatch(id)}${label(id)}</span>`).join('') + '</div>' : '';
+  box.innerHTML = legend + svg + '</svg>';
+}
+
+function render() {
+  const now = Date.now() / 1000, banner = document.getElementById('banner'), ids = sortedIds();
+  const newest = Math.max(0, ...ids.map(id => nodes.get(id).t.at(-1) || 0));
+  const live = ids.filter(id => now - (nodes.get(id).t.at(-1) || 0) <= SILENT_S);
+  banner.className = 'banner' + (link.ok && live.length ? '' : ' stale');
+  if (!link.ok) banner.innerHTML = `<strong>BOARD UNREACHABLE</strong> — ${link.reached ? 'lost contact ' + ago(now - link.reached) + ' ago. ' : ''}Stay joined to this board's MESS Wi-Fi and keep it powered.`;
+  else if (!ids.length) banner.innerHTML = '<strong>WAITING FOR READINGS</strong> — the board is up but has no BME280 readings yet. Check that a sensor board is powered and nearby.';
+  else if (!live.length) banner.innerHTML = `<strong>SENSORS SILENT</strong> — no reading for ${ago(now - newest)}. Check the boards' power and distance.`;
+  else banner.innerHTML = `<strong>LIVE OVER THE MESH</strong> — ${live.length} of ${ids.length} board${ids.length === 1 ? '' : 's'} reporting → this board → this page, one reading a second each`;
+  document.getElementById('sensor-rows').innerHTML = ids.map(id => {
+    const s = nodes.get(id), n = s.t.length, last = s.t[n - 1], silent = now - last > SILENT_S;
+    const value = f => `${s[f][n - 1].toFixed(FIELDS[f].digits)} ${FIELDS[f].unit}`;
+    const signal = s.local ? 'this board' : Number.isFinite(s.rssi) ? `${s.rssi} dBm · ${signalWord(s.rssi)}` : '—';
+    return `<tr class="${silent ? 'silent' : ''}"><td>${swatch(id)}<span title="${id}">${label(id)}</span></td>` +
+      `<td class="num">${value('temperature_c')}</td><td class="num">${value('humidity_pct')}</td><td class="num">${value('pressure_hpa')}</td>` +
+      `<td>${signal}</td><td>${s.local ? '—' : s.hops}</td><td>${s.received.toLocaleString()}</td><td>${ago(now - last)} ago${silent ? ' (silent)' : ''}</td></tr>`;
+  }).join('') || '<tr><td colspan="8" class="hint">No BME280 readings yet.</td></tr>';
+  for (const f in FIELDS) drawChart(f, now);
+}
+
+async function poll() {
+  try {
+    const r = await fetch('/api/readings?after=' + link.after, {cache: 'no-store', signal: AbortSignal.timeout(3000)});
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json(), now = Date.now() / 1000;
+    if (BigInt(j.total) < BigInt(link.after)) { nodes.clear(); link.after = '0'; return poll(); } /* the board restarted */
+    link.after = j.total;
+    for (const row of j.rows) {
+      const m = row.sensor === 'BME280' && READING.exec(row.reading);
+      if (!m) continue; /* placeholders, errors and other sensors */
+      const id = row.mac.replace(/:/g, '');
+      if (!nodes.has(id)) nodes.set(id, {t: [], temperature_c: [], humidity_pct: [], pressure_hpa: [], rssi: null, hops: 0, received: 0, local: false});
+      const s = nodes.get(id);
+      s.t.push(now - Number(BigInt(j.now_us) - BigInt(row.received_us)) / 1e6);
+      s.temperature_c.push(+m[1]); s.pressure_hpa.push(+m[2] / 100); s.humidity_pct.push(+m[3]);
+      Object.assign(s, {rssi: row.rssi, hops: row.hops, local: row.via === 'local', received: s.received + 1});
+    }
+    for (const s of nodes.values()) {
+      const keep = s.t.findIndex(t => t >= now - KEEP_S);
+      if (keep > 0) for (const k of ['t', ...Object.keys(FIELDS)]) s[k].splice(0, keep);
+    }
+    link.ok = true; link.reached = now;
+  } catch (e) {
+    link.ok = false;
+  }
+}
+
+document.querySelectorAll('button[data-seconds]').forEach(b => b.addEventListener('click', () => {
+  span = +b.dataset.seconds;
+  document.querySelectorAll('button[data-seconds]').forEach(o => o.setAttribute('aria-pressed', o === b));
+  render();
+}));
+let resizeTimer;
+addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(render, 150); });
+(async function loop() {
+  await poll();
+  render();
+  setTimeout(loop, 1000);
+})();
 </script>
+</body>
 </html>
