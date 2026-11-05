@@ -43,7 +43,7 @@ plot_sensor <- function(data, x_row, y_col, y_label)
 DATA_SOURCE <- "dummy_data.json"
 raw_data <- fromJSON(DATA_SOURCE, simplifyVector = TRUE)
 
-# ------- Manually pulling data (only 3 sensors + for more specification and control) -------
+# ------- Manually pulling data (Removing packaging based on dummy data) -------
 
 # setting up bme280 data
 bme280_units_array <- raw_data$bme280$unit
@@ -92,5 +92,5 @@ server <- function(input, output, session) {
   })
 
 }
-#options(browser = "firefox") %trouble shooting: if it doesn't load remove the comment and replace with specific browser
+options(browser = "firefox") # trouble shooting: if it doesn't load remove the comment and replace with specific browser
 shinyApp(ui, server)
