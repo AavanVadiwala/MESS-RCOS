@@ -14,3 +14,4 @@ hd-test/esp-idf
 
 #node artifacts
 node_modules/
+package-lock.json

@@ -25,5 +25,12 @@ services:
       db:
         condition: service_healthy
 
+  shiny:
+    build: ./web/R
+    ports:
+      - "3838:3838"
+    volumes:
+      - ./web/R:/srv/shiny-server:ro
+
 volumes:
   pgdata:
