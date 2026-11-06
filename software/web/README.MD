@@ -7,3 +7,9 @@ This assumes at least one node is connected to the same network as the device ru
 to start: 
 
 ``docker compose up --build`` 
+
+Services:
+
+port 5432 PG serer
+port 3000 web frontend
+port 3838 shiny server

@@ -1,54 +1,21 @@
-import { useState } from "react";
-import "./App.css";
-import data from "./dummy_data.json";
-
-function SensorTable({ sensorName, sensor }) {
-  const columns = Object.keys(sensor.unit); 
-  const rows = Object.entries(sensor.readings); // [[time, {temperature, ...}], ...]
-
-  return (
-    <div>
-      <h2>{sensorName}</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Time</th>
-            {columns.map((col) => (
-              <th key={col}>
-                {col} ({sensor.unit[col]})
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(([time, reading]) => (
-            <Row key={reading.time} reading={reading} columns={columns} />
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function Row({reading, columns }) {
-  return (
-    <tr>
-      <td>{reading.time}</td>
-      {columns.map((col) => (
-        <td key={col}>{reading[col]}</td>
-      ))}
-    </tr>
-  );
-}
+import { useState } from 'react'
+import './App.css'
+import TableBME from './components/TableBME';
+import TableSGP from './components/TableSGP';
+import TableBH from './components/TableBH';
 
 function App() {
-  // MAKE IT MORE DYNAMIC, MAP THE WHOLE JSON FILE, FOR EVERY SENSOR, RENDER A TABLE FOR IT.
-  // But then again, since the number of sensors is static, I can just hard code the rendering for it
-  // the json is an object of objects
 
-  return Object.entries(data).map(([sensorName, sensor]) => (
-    <SensorTable key={sensorName} sensorName={sensorName} sensor={sensor} />
-  ));
+  return (
+    <>
+      <h2>BME280</h2>
+      <TableBME></TableBME>
+      <h2>SGP30</h2>
+      <TableSGP></TableSGP>
+      <h2>BH1750</h2>
+      <TableBH></TableBH>
+    </>
+  )
 }
 
-export default App;
+export default App
