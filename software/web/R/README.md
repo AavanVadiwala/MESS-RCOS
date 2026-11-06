@@ -61,6 +61,7 @@ Specialized data comparison and analysis:
 Backend:
 - [] connect backend (demoGraphingTool.R) to front-end
 - [] site boots on command in website from the front-end
+- [] Integrate ability to read data directly from our SQL server (postgresql) 
 
 Testing:
 - [] Make a program that tests all use cases in this subsection
@@ -68,6 +69,10 @@ Testing:
 - [] Test detection of available sensors 
 - [] Test detection of missing sensors
 - [] Test detection of time slot chosen
+
+Current:
+- Oyon -> postgres implementation (Adding Postgres Database to shiny)
+- Alfredo -> Exporting Iframe images instead of hosting a local website 
 
 
 
