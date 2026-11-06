@@ -1,13 +1,13 @@
 # MESS / BACKEND / R
 
 This folder contains all the R-related backend programming regarding the analysis of data that was sent from the sensors on the ESP-32 through the web-socket. 
-demoGraphingTool.R is the driving file that utilizes the shiny library, a package that "makes it easy to build interactive web applications (apps) straight from R."  
+app.R is the driving file that utilizes the shiny library, a package that "makes it easy to build interactive web applications (apps) straight from R."  
 
 Source (library): https://shiny.posit.co/r/getstarted/shiny-basics/lesson1/
 
 ## Explanation
 
-demoGraphingTool.R  
+app.R  
 
 This file uses the shiny library to create a local website that provides you data read from the ESP-32 MESS. This R script expects the data to be packaged in the same predictable 
 standard every reading, and expects a time range that we pull this data from. The R script is in charge of providing many graphs/models including:
@@ -59,7 +59,7 @@ Specialized data comparison and analysis:
 - [] Box plot with all data from all places in one plot per sensor
 
 Backend:
-- [] connect backend (demoGraphingTool.R) to front-end
+- [] connect backend (app.R) to front-end
 - [] site boots on command in website from the front-end
 - [] Integrate ability to read data directly from our SQL server (postgresql) 
 
