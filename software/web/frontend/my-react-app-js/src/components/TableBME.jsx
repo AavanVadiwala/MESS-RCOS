@@ -1,7 +1,7 @@
 import data from "../../../../public/dummy_data.json";
 
 // apparently vite parses json files by default sooooooo
-function Table() {
+function TableBME() {
   // TODO: make it automatically display the header of what is being read, actually,
   // just request that the data from each sensor is read seperately
   // table currently hardcoded, make it dynamic later
@@ -28,4 +28,4 @@ function Table() {
   );
 }
 
-export default Table;
+export default TableBME;
