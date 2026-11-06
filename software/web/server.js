@@ -19,11 +19,12 @@ const pool = new pg.Pool({
 const app = express();
 const port = 3000;
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
-
+const frontendDir = process.env.FRONTEND_DIR
+  || path.join(__dirname, 'frontend', 'my-react-app-js', 'dist');
+app.use(express.static(frontendDir));
 
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  res.sendFile(path.join(frontendDir, 'index.html'));
 });
 
 app.post('/data', (req, res) => {

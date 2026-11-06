@@ -17,8 +17,8 @@ library(jsonlite)
 
 # ------ helper functions ------------
 
-# format_temperature() is a method that formats a time column with a specific format
-format_temperature <- function(table)
+# format_time() is a method that formats a time column with a specific format
+format_time <- function(table)
 {
     table$time <- as.POSIXct(table$time,
                 format = "%Y-%m-%dT%H:%M:%OSZ",
@@ -43,24 +43,27 @@ plot_sensor <- function(data, x_row, y_col, y_label)
 DATA_SOURCE <- "dummy_data.json"
 raw_data <- fromJSON(DATA_SOURCE, simplifyVector = TRUE)
 
-# ------- Manually pulling data (only 3 sensors + for more specification and control) -------
+# utilizing & pulling data (Removing packaging, creating tables, and formatting data) -------
 
 # setting up bme280 data
 bme280_units_array <- raw_data$bme280$unit
 bme280_readings_table <- raw_data$bme280$readings
-bme280_readings_table <- format_temperature(bme280_readings_table)
 
 # setting up sgp30 data
 sgp30_units_array <- raw_data$sgp30$unit
 sgp30_readings_table <- raw_data$sgp30$readings
-sgp30_readings_table <- format_temperature(sgp30_readings_table)
 
 # setting up bh1750 data
 bh1750_units_array <- raw_data$bh1750$unit
 bh1750_readings_table <- raw_data$bh1750$readings
-bh1750_readings_table <- format_temperature(bh1750_readings_table)
 
-#adding sensors manually
+# formatting the time column in all tables
+bme280_readings_table <- format_time(bme280_readings_table)
+sgp30_readings_table <- format_time(sgp30_readings_table)
+bh1750_readings_table <- format_time(bh1750_readings_table)
+
+
+# adding sensors tables to a named list
 sensors <- list(
   bme280 = list(readings = bme280_readings_table, units = bme280_units_array),
   sgp30  = list(readings = sgp30_readings_table,  units = sgp30_units_array),
@@ -75,11 +78,12 @@ ui <- fluidPage(
 )
 
 # ----------------- SHINY server ------------------
-server <- function(input, output, session) {
-
+server <- function(input, output, session) 
+{
   # when the sensor changes, list every column except time as the metric choices
-  observeEvent(input$sensor, {
-    metrics <- setdiff(names(sensors[[input$sensor]]$readings), "time")
+  observeEvent(input$sensor, 
+{
+    metrics <- setdiff( names( sensors[[ input$sensor ]]$readings ), "time")
     updateSelectInput(session, "metric", choices = metrics)
   })
 
@@ -92,5 +96,5 @@ server <- function(input, output, session) {
   })
 
 }
-#options(browser = "firefox") %trouble shooting: if it doesn't load remove the comment and replace with specific browser
+options(browser = "firefox") # trouble shooting: if it doesn't load remove the comment and replace with specific browser
 shinyApp(ui, server)
