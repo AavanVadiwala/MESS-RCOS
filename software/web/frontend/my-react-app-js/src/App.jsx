@@ -1,6 +1,6 @@
 import { useState } from "react";
 import "./App.css";
-import data from "../../../public/dummy_data.json";
+import data from "./dummy_data.json";
 
 function SensorTable({ sensorName, sensor }) {
   const columns = Object.keys(sensor.unit); 
