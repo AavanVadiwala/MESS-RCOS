@@ -47,7 +47,7 @@ typedef struct
 static bme280_calib_t calib;
 static int32_t t_fine;
 
-static 12c_master_bus_handle_t bus_handle;
+static i2c_master_bus_handle_t bus_handle;
 static i2c_master_dev_handle_t sensor_handle;
 
 static esp_err_t bme280_read_reg(i2c_master_dev_handle_t dev, uint8_t reg,
@@ -148,37 +148,27 @@ static uint32_t compensate_humidity(int32_t adc_H)
     return (uint32_t)(v >> 12);
 }
 
-void app_main(void)
+esp_err_t bme280_init(void)
 {
-    i2c_master_bus_handle_t bus_handle;
+    if (sensor_handle) return ESP_OK;
 
-    i2c_master_bus_config_t bus_config = {
-        .i2c_port = I2C_PORT,
-        .sda_io_num = SDA_PIN,
-        .scl_io_num = SCL_PIN,
-        .clk_source = I2C_CLK_SRC_DEFAULT,
-        .glitch_ignore_cnt = 7,
-        .flags.enable_internal_pullup = true
-    };
-
-    ESP_ERROR_CHECK(
-        i2c_new_master_bus(&bus_config, &bus_handle)
-    );
-
-    // Check whether a device responds at either common BME280 address.
-    esp_err_t err76 = i2c_master_probe(bus_handle, 0x76, 1000);
-    esp_err_t err77 = i2c_master_probe(bus_handle, 0x77, 1000);
-
-    printf("Probe 0x76: %s\n", esp_err_to_name(err76));
-    printf("Probe 0x77: %s\n", esp_err_to_name(err77));
-
-    // Stop here if neither address responds.
-    if (err76 != ESP_OK && err77 != ESP_OK) {
-        printf("No device found at 0x76 or 0x77. Check wiring.\n");
-        return;
+    esp_err_t err = i2c_master_get_bus_handle(I2C_PORT, &bus_handle);
+    if (err == ESP_ERR_INVALID_STATE) {
+        i2c_master_bus_config_t bus_config = {
+            .i2c_port = I2C_PORT,
+            .sda_io_num = SDA_PIN,
+            .scl_io_num = SCL_PIN,
+            .clk_source = I2C_CLK_SRC_DEFAULT,
+            .glitch_ignore_cnt = 7,
+            .flags.enable_internal_pullup = true,
+        };
+        err = i2c_new_master_bus(&bus_config, &bus_handle);
     }
+    if (err != ESP_OK) return err;
 
-    // Select the responding address.
+    esp_err_t err76= i2c_master_probe(bus_handle, 0x76, 1000);
+    esp_err_t err77 = i2c_master_probe(bus_handle, 0x77, 1000);
+    if (err76 != ESP_OK && err77 != ESP_OK) return ESP_ERR_NOT_FOUND;
     uint8_t address = (err76 == ESP_OK) ? 0x76 : 0x77;
 
     i2c_device_config_t device_config = {
@@ -186,86 +176,54 @@ void app_main(void)
         .device_address = address,
         .scl_speed_hz = 100000
     };
+    err = i2c_master_bus_add_device(bus_handle, &device_config, &sensor_handle);
+    if (err != ESP_OK) return err;
 
-    i2c_master_dev_handle_t sensor_handle;
-
-    ESP_ERROR_CHECK(
-        i2c_master_bus_add_device(
-            bus_handle,
-            &device_config,
-            &sensor_handle
-        )
-    );
-
-    // Read the sensor's chip ID.
     uint8_t chip_id = 0;
-    esp_err_t err = bme280_read_reg(
-        sensor_handle, BME280_REG_ID, &chip_id, 1
-    );
+    err = bme280_read_reg(sensor_handle, BME280_REG_ID, &chip_id, 1);
+    if (err != ESP_OK) goto fail;
+    if (chip_id != BME280_CHIP_ID) { err = ESP_ERR_INVALID_RESPONSE; goto fail; }
 
-    printf("Chip ID read: %s, value: 0x%02X\n",
-           esp_err_to_name(err), chip_id);
-
-    if (err != ESP_OK) {
-        printf("Could not read chip ID. Check sensor communication.\n");
-        return;
-    }
-
-    if (chip_id != BME280_CHIP_ID) {
-        printf("Unexpected chip ID: 0x%02X (expected 0x%02X)\n",
-               chip_id, BME280_CHIP_ID);
-        return;
-    }
-
-    printf("BME280 detected successfully!\n");
-
-    // Reset the sensor.
-    ESP_ERROR_CHECK(
-        bme280_write(sensor_handle, BME280_REG_RESET, 0xB6)
-    );
+    err = bme280_write_reg(sensor_handle, BME280_REG_RESET, 0xB6);
+    if (err != ESP_OK) goto fail;
     vTaskDelay(pdMS_TO_TICKS(10));
 
-    // Read factory calibration coefficients.
-    ESP_ERROR_CHECK(bme280_read_calibration(sensor_handle));
+    err = bme280_read_calibration(sensor_handle);
+    if (err != ESP_OK) goto fail;
 
-    // Configure humidity, filter, oversampling, and normal mode.
-    ESP_ERROR_CHECK(bme280_write(sensor_handle, BME280_REG_CTRL_HUM, 0x01));
-    ESP_ERROR_CHECK(bme280_write(sensor_handle, BME280_REG_CONFIG, 0xA8));
-    ESP_ERROR_CHECK(bme280_write(sensor_handle, BME280_REG_CTRL_MEAS, 0x57));
+    if ((err = bme280_write_reg(sensor_handle, BME280_REG_CTRL_HUM, 0x01)) != ESP_OK) goto fail;
+    if ((err = bme280_write_reg(sensor_handle, BME280_REG_CONFIG, 0xA8)) != ESP_OK) goto fail;
+    if ((err = bme280_write_reg(sensor_handle, BME280_REG_CTRL_MEAS, 0x57)) != ESP_OK) goto fail;
+    return ESP_OK;
 
-    printf("BME280 sensor started!\n");
+fail:
+    i2c_master_bus_rm_device(sensor_handle);
+    sensor_handle = NULL;
+    return err;
+}
 
-    // Keep your existing while (1) loop here, unchanged.
-    while (1)
-    {
-        vTaskDelay(pdMS_TO_TICKS(1000));
+esp_err_t bme280_read(sensor_reading_t *reading)
+{
+    if (!reading) return ESP_ERR_INVALID_ARG;
+    *reading = (sensor_reading_t){.status = ESP_FAIL};
+    if (!sensor_handle) return reading->status = ESP_ERR_INVALID_STATE;
 
-        uint8_t d[8];
-        esp_err_t result = bme280_read_reg(
-            sensor_handle, BME280_REG_DATA, d, sizeof(d)
-        );
+    uint8_t d[8];
+    esp_err_t err = bme280_read_reg(sensor_handle, BME280_REG_DATA, d, sizeof(d));
+    if (err != ESP_OK) return reading->status = err;
 
-        if (result == ESP_OK)
-        {
-            int32_t adc_P = ((int32_t)d[0] << 12) |
-                            ((int32_t)d[1] << 4) | (d[2] >> 4);
-            int32_t adc_T = ((int32_t)d[3] << 12) |
-                            ((int32_t)d[4] << 4) | (d[5] >> 4);
-            int32_t adc_H = ((int32_t)d[6] << 8) | d[7];
+    int32_t adc_P = ((int32_t)d[0] << 12) | ((int32_t)d[1] << 4) | (d[2] >> 4);
+    int32_t adc_T = ((int32_t)d[3] << 12) | ((int32_t)d[4] << 4) | (d[5] >> 4);
+    int32_t adc_H = ((int32_t)d[6] << 8) | d[7];
 
-            float temp_c = compensate_temperature(adc_T) / 100.0f;
-            float temp_f = (temp_c * 9.0f / 5.0f) + 32.0f;
-            float pressure_hpa =
-                compensate_pressure(adc_P) / 256.0f / 100.0f;
-            float humidity = compensate_humidity(adc_H) / 1024.0f;
+    float temp_c = compensate_temperature(adc_T) / 100.f;
+    float pressure_hpa = compensate_pressure(adc_P) / 256.0f / 100.0f;
+    float humidity = compensate_humidity(adc_H) / 1024.0f;
 
-            printf("Temperature: %.2f F, Humidity: %.2f %%RH, "
-            "Pressure: %.2f hPa\n",
-            temp_f, humidity, pressure_hpa);
-        }
-        else
-        {
-            printf("Sensor read failed: %s\n", esp_err_to_name(result));
-        }
-    }
+    *reading = (sensor_reading_t) {
+        .status = ESP_OK,
+        .count = 3,
+        .values = {temp_c, humidity, pressure_hpa},
+    };
+    return ESP_OK;
 }
