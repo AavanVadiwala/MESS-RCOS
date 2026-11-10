@@ -6,3 +6,10 @@
 
 # Per-machine editor settings
 .vscode/
+
+# credentials
+**/.env
+
+#node artifacts
+node_modules/
+package-lock.json
