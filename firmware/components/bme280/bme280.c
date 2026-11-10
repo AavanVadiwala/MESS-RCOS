@@ -249,13 +249,14 @@ void app_main(void)
             int32_t adc_H = ((int32_t)d[6] << 8) | d[7];
 
             float temp_c = compensate_temperature(adc_T) / 100.0f;
+            float temp_f = (temp_c * 9.0f / 5.0f) + 32.0f;
             float pressure_hpa =
                 compensate_pressure(adc_P) / 256.0f / 100.0f;
             float humidity = compensate_humidity(adc_H) / 1024.0f;
 
-            printf("Temperature: %.2f C, Humidity: %.2f %%RH, "
-                   "Pressure: %.2f hPa\n",
-                   temp_c, humidity, pressure_hpa);
+            printf("Temperature: %.2f F, Humidity: %.2f %%RH, "
+            "Pressure: %.2f hPa\n",
+            temp_f, humidity, pressure_hpa);
         }
         else
         {
