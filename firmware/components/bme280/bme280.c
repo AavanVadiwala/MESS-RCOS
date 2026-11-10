@@ -4,6 +4,8 @@
 #include "freertos/task.h"
 #include "driver/i2c_master.h"
 #include "esp_err.h"
+#include "bme280.h"
+#include "driver/gpio.h"
 
 #define I2C_PORT I2C_NUM_0
 #define SDA_PIN GPIO_NUM_21
@@ -45,13 +47,16 @@ typedef struct
 static bme280_calib_t calib;
 static int32_t t_fine;
 
-static esp_err_t bme280_read(i2c_master_dev_handle_t dev, uint8_t reg,
+static 12c_master_bus_handle_t bus_handle;
+static i2c_master_dev_handle_t sensor_handle;
+
+static esp_err_t bme280_read_reg(i2c_master_dev_handle_t dev, uint8_t reg,
                              uint8_t *buf, size_t len)
 {
     return i2c_master_transmit_receive(dev, &reg, 1, buf, len, I2C_TIMEOUT_MS);
 }
 
-static esp_err_t bme280_write(i2c_master_dev_handle_t dev, uint8_t reg,
+static esp_err_t bme280_write_reg(i2c_master_dev_handle_t dev, uint8_t reg,
                               uint8_t value)
 {
     uint8_t buf[2] = {reg, value};
@@ -63,9 +68,9 @@ static esp_err_t bme280_read_calibration(i2c_master_dev_handle_t dev)
     uint8_t a[26];
     uint8_t b[7];
 
-    esp_err_t err = bme280_read(dev, BME280_REG_CALIB_00, a, sizeof(a));
+    esp_err_t err = bme280_read_reg(dev, BME280_REG_CALIB_00, a, sizeof(a));
     if (err != ESP_OK) return err;
-    err = bme280_read(dev, BME280_REG_CALIB_26, b, sizeof(b));
+    err = bme280_read_reg(dev, BME280_REG_CALIB_26, b, sizeof(b));
     if (err != ESP_OK) return err;
 
     calib.T1 = (uint16_t)(a[1] << 8 | a[0]);
@@ -194,7 +199,7 @@ void app_main(void)
 
     // Read the sensor's chip ID.
     uint8_t chip_id = 0;
-    esp_err_t err = bme280_read(
+    esp_err_t err = bme280_read_reg(
         sensor_handle, BME280_REG_ID, &chip_id, 1
     );
 
@@ -236,7 +241,7 @@ void app_main(void)
         vTaskDelay(pdMS_TO_TICKS(1000));
 
         uint8_t d[8];
-        esp_err_t result = bme280_read(
+        esp_err_t result = bme280_read_reg(
             sensor_handle, BME280_REG_DATA, d, sizeof(d)
         );
 
