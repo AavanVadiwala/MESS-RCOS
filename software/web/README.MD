@@ -13,3 +13,6 @@ Services:
 port 5432 PG serer
 port 3000 web frontend
 port 3838 shiny server
+
+
+To seed the DB run random_input,py in db/db_test/ it will add 10 fake records per sensor per run for debug.
