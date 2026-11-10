@@ -6,7 +6,7 @@ import TableBH from './components/TableBH';
 
 //diplay basic info on MESS, what it is and what the sensors do
 //diplay the table of data on the different sensors
-//later on display a graphs
+//later on display a graphs for the sensors
 function App() {
 
   const [web_state, setState] = useState('info')
