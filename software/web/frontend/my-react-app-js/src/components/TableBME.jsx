@@ -1,4 +1,5 @@
 import data from "../../public/dummy_data.json";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 // apparently vite parses json files by default sooooooo
 function TableBME() {
@@ -27,5 +28,22 @@ function TableBME() {
     </table>
   );
 }
-
+/*
+function graphBME(){
+  <div style = {{width:'100%', height:300}}>
+    <ResponsiveContainer width = "100%" height ="100%">
+      <LineChart data = {data} margin ={{top:5, right: 30, left: 20, bottom:}}>
+        <CartesianGrid strokeDasharray="3 3"/>
+          <XAxis dataKey="time"/>
+          <YAxis/>
+          <Tooltip/>
+          <Legend/>
+          <Line type = "monotone" dataKey="tempurature" stroke="#8884d8" activeaDot={{r:8}}/>
+          <Line type = "monotone" dataKey="humidity" stroke="#84add8" activeaDot={{r:8}}/>
+          <Line type = "monotone" dataKey="pressure" stroke="#c345aa" activeaDot={{r:8}}/>
+      </LineChart>
+    </ResponsiveContainer>
+  </div>
+}
+*/
 export default TableBME;

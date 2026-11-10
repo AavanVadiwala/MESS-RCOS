@@ -4,9 +4,12 @@ import TableBME from './components/TableBME';
 import TableSGP from './components/TableSGP';
 import TableBH from './components/TableBH';
 
+//diplay basic info on MESS, what it is and what the sensors do
+//diplay the table of data on the different sensors
+//later on display a graphs
 function App() {
 
-  const [web_state, setState] = useState('bme')
+  const [web_state, setState] = useState('info')
 
   return (
     <>
@@ -15,9 +18,31 @@ function App() {
       <button onClick={() => setState('bme')}>BME280</button>
       <button onClick={() => setState('sgp')}>SGP30</button>
       <button onClick={() => setState('bh')}>BH1750</button>
+      <button onClick={()=> setState('info')}>Info</button>
 
 
     </div>
+    {web_state === 'info' && (
+      <>
+      <h2>What is MESS</h2>
+      <p>Mesh Environment Sensor System, essentially a network of 
+        microcontrollers with a variety of sensors attached</p>
+        <br></br>
+        <br></br>
+      <h2>The Sensors </h2>
+      <h3>BME280</h3>
+      <p>Humidity and pressure sensor</p>
+      <h3>SGP30</h3>
+      <p>Multi-pixel gas sensor</p>
+      <h3>BH1750</h3>
+      <p>Ambient light sensor</p>
+      <br></br>
+      <br></br>
+      <br></br>
+      <br></br>
+      </>
+      
+    )}
     {web_state === 'bme'&& (
       <>
       <h2>BME280</h2>
