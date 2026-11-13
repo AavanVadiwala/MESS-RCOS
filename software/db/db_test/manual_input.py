@@ -1,39 +1,78 @@
 import os
+from unittest import case
 import psycopg
 from dotenv import load_dotenv
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "../../web/.env"))
 
-temp_sensor_id = 1
+temp_sensor_id = 9
 temp_loc = "Room 101"
 
-def add_readings_to_db(cur, data_type, value, id, loc):
-        cur.execute(
-            f"INSERT INTO {data_type}_data ({data_type}_value, sensor_id, loc) VALUES (%s, %s, %s)",
-            (value, id, loc),)
+def add_readings_to_db(cur, sensor_type, value, id, loc):
+        match sensor_type:
+            case "bme280":
+                cur.execute(
+                    "INSERT INTO bme280_data (temperature, humidity, pressure, sensor_id, loc) "
+                    "VALUES (%s, %s, %s, %s, %s)",
+                    (value[0], value[1], value[2], id, loc),
+                )
+            case "sgp30":
+                cur.execute(
+                    f"INSERT INTO sgp30_data (eco2, tvoc, sensor_id, loc) VALUES (%s, %s, %s, %s)",
+                    (value[0], value[1], id, loc),
+                )
+            case "bh1750":
+                cur.execute(
+                    f"INSERT INTO bh1750_data (lux, sensor_id, loc) VALUES (%s, %s, %s)",
+                    (value[0], id, loc),)
+            case _:
+                print("Invalid sensor type.")
+                return
 
 def live_readings(cur):
-    data_type = input("Enter the data type (light, gas, temp, humid): ").strip().lower()
-    if data_type not in ["light", "gas", "temp", "humid"]:
-        print("Invalid data type. Please enter 'light', 'gas', 'temp', or 'humid'.")
+    sensor_type = input("Enter the sensor type (bme280, sgp30, bh1750): ").strip().lower()
+    if sensor_type not in ["bme280", "sgp30", "bh1750"]:
+        print("Invalid sensor type. Please enter 'bme280', 'sgp30', or 'bh1750'.")
         return
     try:
-        data_value = float(input("Enter the data value: "))
+        match sensor_type:
+                case "bme280":
+                    data_type = (input("Enter the data value (temperature, humidity, pressure): "))
+                    data_value = [float(x) for x in data_type.strip().split()]
+                case "sgp30":
+                    data_type = (input("Enter the data value (eco2, tvoc): "))
+                    data_value = [float(x) for x in data_type.strip().split()]
+                case "bh1750":
+                    data_type = (input("Enter the data value (lux): ")) 
+                    data_value = [float(x) for x in data_type.strip().split()]
+                case _:
+                    print("Invalid sensor type.")
+                    return
     except ValueError:
         print("Invalid data value. Please enter a valid number.")
         return
 
-    add_readings_to_db(cur, data_type, data_value, temp_sensor_id, temp_loc)
+    add_readings_to_db(cur, sensor_type, data_value, temp_sensor_id, temp_loc)
 
-def output_readings(cur, data_type):
-    cur.execute(f"SELECT recorded_at, {data_type}_value, sensor_id, loc FROM {data_type}_data ORDER BY recorded_at DESC LIMIT 10")
+def output_readings(cur, sensor_type):
+    match sensor_type:
+        case "bme280":
+            cur.execute(f"SELECT recorded_at, temperature, humidity, pressure, sensor_id, loc FROM bme280_data ORDER BY recorded_at DESC LIMIT 10")
+        case "sgp30":
+            cur.execute(f"SELECT recorded_at, eco2, tvoc, sensor_id, loc FROM sgp30_data ORDER BY recorded_at DESC LIMIT 10")
+        case "bh1750":
+            cur.execute(f"SELECT recorded_at, lux, sensor_id, loc FROM bh1750_data ORDER BY recorded_at DESC LIMIT 10")
+        case _:
+            print("Invalid sensor type.")
+            return
+
     rows = cur.fetchall()
-    print(f"\nLast 10 readings for {data_type}:")
+    print(f"\nLast 10 readings for {sensor_type}:")
     print(f"{'Recorded at':19} {'Value':>10}")
     print("-" * 31)
     for row in rows:
         timestamp = row[0].strftime("%Y-%m-%d %H:%M:%S")
-        print(f"Senor {row[2]}, Location: {row[3]}: {timestamp:19} {row[1]:10.2f}")
+        print(f"Sensor {row[2]}, Location: {row[3]}: {timestamp:19} {row[1]:10.2f}")
 
 
 def main():
@@ -55,11 +94,11 @@ def main():
                                 break
                             conn.commit()
                     elif choice == 'output':
-                        data_type = input("Enter the data type (light, gas, temp, humid): ").strip().lower()
-                        if data_type not in ["light", "gas", "temp", "humid"]:
-                            print("Invalid data type. Please enter 'light', 'gas', 'temp', or 'humid'.")
+                        sensor_type = input("Enter the sensor type (bme280, sgp30, bh1750): ").strip().lower()
+                        if sensor_type not in ["bme280", "sgp30", "bh1750"]:
+                            print("Invalid sensor type. Please enter 'bme280', 'sgp30', 'bh1750'.")
                             continue
-                        output_readings(cur, data_type)
+                        output_readings(cur, sensor_type)
                     elif choice == 'exit':
                         break
             except (KeyboardInterrupt, EOFError): # Handle Ctrl+C or Ctrl+D to stop the loop
