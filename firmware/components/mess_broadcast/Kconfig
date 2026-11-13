@@ -1,0 +1,9 @@
+menu "MESS Wi-Fi mesh"
+config MESS_MESH_CHANNEL
+    int "Mesh Wi-Fi channel"
+    range 1 13
+    default 1
+config MESS_MESH_AP_PASSWORD
+    string "Mesh link password (8 to 63 characters)"
+    default "MESS12345"
+endmenu
