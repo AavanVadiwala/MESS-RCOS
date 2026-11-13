@@ -14,6 +14,7 @@ library(jsonlite)
 # (requires package specification for certain methods)
 # dplyr::filter() masks stats::filter()
 # dplyr::lag()    masks stats::lag()
+# jsonlite::validate() masks shiny::validate()
 
 # ------ helper functions ------------
 
@@ -32,47 +33,52 @@ plot_sensor <- function(data, x_row, y_col, y_label)
     ggplot(data, aes(x = .data[[x_row]], y = .data[[y_col]])) +
     geom_line(linewidth = 0.8) +
     geom_point(size = 2) +
-    scale_x_datetime(date_labels = "%S") +
-    labs(x = "time (s)", y = y_label) +
+    scale_x_datetime(date_labels = "%H:%M:%S") +
+    labs(x = "time (UTC)", y = y_label) +
     theme_minimal()
 }
 
 # ------------ Data source -----------------------
 
-# DATA_SOURCE <- "https://your-site.com/api/sensors" %this is used for the site 
-DATA_SOURCE <- "dummy_data.json"
-raw_data <- fromJSON(DATA_SOURCE, simplifyVector = TRUE)
+# The data comes from the Express API in server.js: GET /api/<sensor>?limit=N
+# Inside docker-compose the API is the "web" service; from RStudio it's localhost.
+# Set API_URL to override (e.g. "https://your-site.com").
+API_CANDIDATES <- c(Sys.getenv("API_URL"), "http://web:3000", "http://localhost:3000")
+API_CANDIDATES <- API_CANDIDATES[API_CANDIDATES != ""]
+LIMIT <- 100          # rows per sensor to fetch
+REFRESH_MS <- 10000   # re-fetch every 10 s
 
-# utilizing & pulling data (Removing packaging, creating tables, and formatting data) -------
-
-# setting up bme280 data
-bme280_units_array <- raw_data$bme280$unit
-bme280_readings_table <- raw_data$bme280$readings
-
-# setting up sgp30 data
-sgp30_units_array <- raw_data$sgp30$unit
-sgp30_readings_table <- raw_data$sgp30$readings
-
-# setting up bh1750 data
-bh1750_units_array <- raw_data$bh1750$unit
-bh1750_readings_table <- raw_data$bh1750$readings
-
-# formatting the time column in all tables
-bme280_readings_table <- format_time(bme280_readings_table)
-sgp30_readings_table <- format_time(sgp30_readings_table)
-bh1750_readings_table <- format_time(bh1750_readings_table)
-
-
-# adding sensors tables to a named list
-sensors <- list(
-  bme280 = list(readings = bme280_readings_table, units = bme280_units_array),
-  sgp30  = list(readings = sgp30_readings_table,  units = sgp30_units_array),
-  bh1750 = list(readings = bh1750_readings_table, units = bh1750_units_array)
+# sensors and their plottable columns + units (the API doesn't send units)
+# names must match the tables in db/schema.sql (<sensor>_data) and their columns
+sensor_units <- list(
+  bme280 = list(temperature = "C", humidity = "%RH", pressure = "hPa"),
+  sgp30  = list(eco2 = "ppm", tvoc = "ppb"),
+  bh1750 = list(lux = "lx")
 )
+
+# fetch_sensor() pulls the newest `limit` rows for one sensor and returns a data frame
+# with a POSIXct `time` column + that sensor's metric columns (id/sensor_id/loc dropped)
+fetch_sensor <- function(sensor, limit = LIMIT)
+{
+  metrics <- names(sensor_units[[sensor]])
+  for (base in API_CANDIDATES) {
+    url <- sprintf("%s/api/%s?limit=%d", base, sensor, limit)
+    rows <- tryCatch(fromJSON(url, simplifyVector = TRUE), error = function(e) NULL)
+    if (is.null(rows)) next                      # this address didn't answer, try the next one
+    if (length(rows) == 0) break                 # API answered but the table is empty
+    rows <- as.data.frame(rows)
+    rows$time <- rows$recorded_at
+    return(format_time(rows[, c("time", metrics)]))
+  }
+  # empty frame with the right columns so the UI still works
+  empty <- data.frame(time = as.POSIXct(character(0), tz = "UTC"))
+  for (m in metrics) empty[[m]] <- numeric(0)
+  empty
+}
 
 # ----------------- UI ----------------------
 ui <- fluidPage(
-  selectInput("sensor", "Sensor", choices = names(sensors), width = "200px"),
+  selectInput("sensor", "Sensor", choices = names(sensor_units), width = "200px"),
   selectInput("metric", "Metric", choices = NULL, width = "200px"),
   plotOutput("sensor_plot", height = "500px")
 )
@@ -80,19 +86,25 @@ ui <- fluidPage(
 # ----------------- SHINY server ------------------
 server <- function(input, output, session) 
 {
-  # when the sensor changes, list every column except time as the metric choices
+  # when the sensor changes, list that sensor's metrics as the choices
   observeEvent(input$sensor, 
 {
-    metrics <- setdiff( names( sensors[[ input$sensor ]]$readings ), "time")
-    updateSelectInput(session, "metric", choices = metrics)
+    updateSelectInput(session, "metric", choices = names(sensor_units[[input$sensor]]))
+  })
+
+  # readings for the selected sensor, re-fetched from the API every REFRESH_MS
+  readings <- reactive({
+    invalidateLater(REFRESH_MS)
+    fetch_sensor(req(input$sensor))
   })
 
   output$sensor_plot <- renderPlot({
-    s <- sensors[[req(input$sensor)]]
-    req(input$metric %in% names(s$readings))   # skip the moment between switching sensors
+    data <- readings()
+    req(input$metric %in% names(data))   # skip the moment between switching sensors
+    shiny::validate(need(nrow(data) > 0, "No readings yet for this sensor (or the API is unreachable)."))  # shiny:: because jsonlite::validate masks it
 
-    plot_sensor(s$readings, "time", input$metric,
-                paste0(input$metric, " (", s$units[[input$metric]], ")"))
+    plot_sensor(data, "time", input$metric,
+                paste0(input$metric, " (", sensor_units[[input$sensor]][[input$metric]], ")"))
   })
 
 }

@@ -3,8 +3,6 @@
 **/sdkconfig
 **/sdkconfig.old
 **/*.log
-hd-test/esp-idf
-
 
 # Per-machine editor settings
 .vscode/

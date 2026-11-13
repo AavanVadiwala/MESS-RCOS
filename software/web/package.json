@@ -2,5 +2,8 @@
   "dependencies": {
     "express": "^5.3.0",
     "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "qrcode-terminal": "^0.12.0"
   }
 }
