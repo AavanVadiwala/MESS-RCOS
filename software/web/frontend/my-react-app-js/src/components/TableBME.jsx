@@ -28,22 +28,55 @@ function TableBME() {
     </table>
   );
 }
-/*
-function graphBME(){
+
+//display the graphs of the read in data
+function GraphBME(){
+  return (
+  <div>
   <div style = {{width:'100%', height:300}}>
     <ResponsiveContainer width = "100%" height ="100%">
-      <LineChart data = {data} margin ={{top:5, right: 30, left: 20, bottom:}}>
+      <LineChart data = {data.bme280.readings} margin ={{top:5, right: 30, left: 20, bottom:5}}>
         <CartesianGrid strokeDasharray="3 3"/>
           <XAxis dataKey="time"/>
           <YAxis/>
           <Tooltip/>
           <Legend/>
-          <Line type = "monotone" dataKey="tempurature" stroke="#8884d8" activeaDot={{r:8}}/>
-          <Line type = "monotone" dataKey="humidity" stroke="#84add8" activeaDot={{r:8}}/>
-          <Line type = "monotone" dataKey="pressure" stroke="#c345aa" activeaDot={{r:8}}/>
+          <Line type = "monotone" dataKey="temperature" stroke="#8884d8" activeDot={{r:8}}/>
       </LineChart>
     </ResponsiveContainer>
   </div>
+  <div style = {{width:'100%', height:300}}>
+    <ResponsiveContainer width = "100%" height ="100%">
+      <LineChart data = {data.bme280.readings} margin ={{top:5, right: 30, left: 20, bottom:5}}>
+        <CartesianGrid strokeDasharray="3 3"/>
+          <XAxis dataKey="time"/>
+          <YAxis/>
+          <Tooltip/>
+          <Legend/>
+          <Line type = "monotone" dataKey="humidity" stroke="#84add8" activeDot={{r:8}}/>
+      </LineChart>
+    </ResponsiveContainer>
+  </div>
+  <div style = {{width:'100%', height:300}}>
+    <ResponsiveContainer width = "100%" height ="100%">
+      <LineChart data = {data.bme280.readings} margin ={{top:5, right: 30, left: 20, bottom:5}}>
+        <CartesianGrid strokeDasharray="3 3"/>
+          <XAxis dataKey="time"/>
+          <YAxis/>
+          <Tooltip/>
+          <Legend/>
+          <Line type = "monotone" dataKey="pressure" stroke="#c345aa" activeDot={{r:8}}/>
+      </LineChart>
+    </ResponsiveContainer>
+  </div>
+  </div>);
 }
-*/
-export default TableBME;
+
+export default function BME(){
+  return (
+    <div>
+      <GraphBME />
+      <TableBME />
+    </div>
+  );
+}
