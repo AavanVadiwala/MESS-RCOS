@@ -36,6 +36,10 @@
   .sensors tr.silent td { color:var(--muted); }
   .swatch { display:inline-block; width:22px; height:0; border-top:3px solid; vertical-align:middle; margin-right:6px; }
   .legend { display:flex; flex-wrap:wrap; gap:4px 14px; font-size:12px; color:var(--muted); margin-bottom:4px; }
+  .now { font-size:15px; margin:8px 0 2px; }
+  .now .word { font-weight:bold; }
+  .about { font-size:13px; color:var(--muted); margin:0 0 10px; max-width:820px; line-height:1.45; }
+  .sensors td small { display:block; font-size:12px; font-weight:normal; color:var(--muted); }
   .readout { position:absolute; top:0; right:0; font-size:12px; color:var(--ink); font-variant-numeric:tabular-nums; background:var(--bg); }
 </style>
 </head>
@@ -46,10 +50,12 @@
   <div id="banner" class="banner">Loading readings…</div>
   <p class="connect-hint" id="connect-hint">Have the brain ESP32? Plug it into this computer's USB and press <strong>Connect brain</strong> to see readings live. Nothing to install.</p>
   <div class="controls" role="group" aria-label="Time range">
+    <button data-seconds="60" aria-pressed="false">1 minute</button>
     <button data-seconds="300" aria-pressed="false">5 minutes</button>
     <button data-seconds="3600" aria-pressed="true">1 hour</button>
     <button data-seconds="21600" aria-pressed="false">6 hours</button>
     <button data-seconds="86400" aria-pressed="false">24 hours</button>
+    <span role="group" aria-label="Temperature unit"><button data-unit="C" aria-pressed="true">°C</button> <button data-unit="F" aria-pressed="false">°F</button></span>
     <button id="connect">Connect brain (USB)</button>
     <a class="btn" id="download" download="mess-sensors.csv" href="#">Download CSV</a>
   </div>
@@ -59,24 +65,59 @@
       <tbody id="sensor-rows"><tr><td colspan="10" class="hint">No sensors yet.</td></tr></tbody>
     </table>
   </div>
-  <section class="panel"><h2>Temperature</h2><p class="hint">°C · nearby board heat can raise this</p><div class="chart" id="c-temperature_c"></div></section>
-  <section class="panel"><h2>Relative humidity</h2><p class="hint">%RH</p><div class="chart" id="c-humidity_pct"></div></section>
-  <section class="panel"><h2>Pressure</h2><p class="hint">hPa · local absolute pressure, not sea-level corrected</p><div class="chart" id="c-pressure_hpa"></div></section>
-  <section class="panel"><h2>Light</h2><p class="hint">lx · BH1750</p><div class="chart" id="c-lux"></div></section>
-  <section class="panel"><h2>TVOC</h2><p class="hint">ppb · SGP30 total volatile organic compounds</p><div class="chart" id="c-tvoc_ppb"></div></section>
-  <section class="panel"><h2>eCO₂</h2><p class="hint">ppm · SGP30 estimate from VOCs, not a direct CO₂ measurement</p><div class="chart" id="c-eco2_ppm"></div></section>
+  <p id="range-note" class="hint" hidden></p>
+  <section class="panel"><h2>Temperature</h2><p class="hint">°C or °F · BME280</p>
+    <p class="about">Air temperature at the sensor. About 20–24 °C (68–75 °F) is comfortable indoors. The board's own electronics can make it read 1–2 °C warm.</p>
+    <p class="now" id="now-temperature_c"></p><div class="chart" id="c-temperature_c"></div></section>
+  <section class="panel"><h2>Relative humidity</h2><p class="hint">%RH · BME280</p>
+    <p class="about">How much water vapour the air holds, as a share of the most it could hold at this temperature. 30–60 % is comfortable; below 30 % feels dry, and above 60 % feels muggy and helps mould grow. Breathing on the sensor makes it jump.</p>
+    <p class="now" id="now-humidity_pct"></p><div class="chart" id="c-humidity_pct"></div></section>
+  <section class="panel"><h2>Pressure</h2><p class="hint">hPa (inHg) · BME280</p>
+    <p class="about">The weight of the air above the sensor. This is the actual pressure where the sensor sits, not corrected to sea level, so it reads lower than weather reports at higher altitude. Weather systems move it by a few hPa over hours: falling usually means clouds or rain on the way, rising means clearing. 1 hPa = 0.02953 inHg.</p>
+    <p class="now" id="now-pressure_hpa"></p><div class="chart" id="c-pressure_hpa"></div></section>
+  <section class="panel"><h2>Light</h2><p class="hint">lux · BH1750</p>
+    <p class="about">How bright it is at the sensor. Roughly: under 10 lx is dark, 50–300 lx a normally lit room, 300–1,000 lx a bright office, and 10,000 lx or more daylight. Cover the sensor or shine a phone light on it to see it change.</p>
+    <p class="now" id="now-lux"></p><div class="chart" id="c-lux"></div></section>
+  <section class="panel"><h2>TVOC</h2><p class="hint">ppb · SGP30</p>
+    <p class="about">Total volatile organic compounds: gases from cleaning products, paint, cooking, perfume and people, in parts per billion. Under 220 ppb is good, 220–660 ppb moderate (open a window), and above 660 ppb poor. The SGP30 measures relative to its own baseline, so readings settle over the first hours.</p>
+    <p class="now" id="now-tvoc_ppb"></p><div class="chart" id="c-tvoc_ppb"></div></section>
+  <section class="panel"><h2>eCO₂</h2><p class="hint">ppm · SGP30</p>
+    <p class="about">"Equivalent CO₂": the SGP30's estimate of carbon dioxide worked out from the VOCs, not a direct CO₂ measurement. Outdoor air is about 420 ppm and the sensor never reports below 400. Indoors, under 1,000 ppm is fine; 1,000–2,000 ppm means the room is stuffy and needs fresh air.</p>
+    <p class="now" id="now-eco2_ppm"></p><div class="chart" id="c-eco2_ppm"></div></section>
   <footer>Each sensor is named by the last four characters of its board ID and keeps its colour on every graph. When the brain is online it uploads every 10 seconds and this page shows those readings from anywhere. Connect brain needs Chrome or Edge on a laptop or desktop; live readings show only on the computer the brain is plugged into. Otherwise this page shows readings published about every 6 minutes by a computer running the bridge; GitHub Pages can add up to 10 minutes of caching, so expect readings to be 5–20 minutes old. Gaps mean a sensor or the brain was offline; no values are filled in.</footer>
 </main>
 <script>
 /* Every value is optional: a board without a sensor, or an SGP30 still warming up, leaves it null. */
+/* bands: [upper limit, plain-language word] for describing a value (indoor rules of thumb). */
 const FIELDS = {
-  temperature_c: {unit: '°C', digits: 2, min: -40, max: 85},
-  humidity_pct: {unit: '%RH', digits: 1, min: 0, max: 100},
+  temperature_c: {unit: '°C', digits: 2, min: -40, max: 85,
+    bands: [[16, 'cold'], [20, 'cool'], [24, 'comfortable'], [27, 'warm'], [Infinity, 'hot']]},
+  humidity_pct: {unit: '%RH', digits: 1, min: 0, max: 100,
+    bands: [[30, 'dry'], [60, 'comfortable'], [70, 'humid'], [Infinity, 'very humid']]},
   pressure_hpa: {unit: 'hPa', digits: 2, min: 300, max: 1100},
-  lux: {unit: 'lx', digits: 0, min: 0, max: 65535},
-  tvoc_ppb: {unit: 'ppb', digits: 0, min: 0, max: 60000},
-  eco2_ppm: {unit: 'ppm', digits: 0, min: 400, max: 60000},
+  lux: {unit: 'lx', digits: 0, min: 0, max: 65535,
+    bands: [[10, 'dark'], [50, 'dim'], [300, 'normal room light'], [1000, 'bright indoor'], [10000, 'daylight, shade'], [Infinity, 'direct sunlight']]},
+  tvoc_ppb: {unit: 'ppb', digits: 0, min: 0, max: 60000,
+    bands: [[65, 'excellent'], [220, 'good'], [660, 'moderate'], [2200, 'poor'], [Infinity, 'unhealthy']]},
+  eco2_ppm: {unit: 'ppm', digits: 0, min: 400, max: 60000,
+    bands: [[600, 'fresh'], [1000, 'good'], [1500, 'stuffy'], [2000, 'poor'], [Infinity, 'very poor']]},
 };
+let tempUnit = 'C'; /* temperature unit for graphs and the first value in the table */
+try { if (localStorage.getItem('mess-temp-unit') === 'F') tempUnit = 'F'; } catch (e) { /* storage blocked: use °C */ }
+const toF = c => c * 9 / 5 + 32;
+/* A stored value as drawn: temperature follows the chosen unit, everything else as measured. */
+const shown = (f, v) => f === 'temperature_c' && tempUnit === 'F' ? toF(v) : v;
+const shownUnit = f => f === 'temperature_c' ? '°' + tempUnit : FIELDS[f].unit;
+const word = (f, v) => FIELDS[f].bands ? FIELDS[f].bands.find(([limit]) => v < limit)[1] : '';
+/* A value in words: main "26.2 °C", other unit "79.2 °F" or "29.53 inHg", plain word "warm",
+ * and extra = other and word together, as the table shows them. */
+function describe(f, v) {
+  const main = `${shown(f, v).toFixed(f === 'temperature_c' ? 1 : FIELDS[f].digits)} ${shownUnit(f)}`;
+  const other = f === 'temperature_c' ? (tempUnit === 'F' ? `${v.toFixed(1)} °C` : `${toF(v).toFixed(1)} °F`)
+    : f === 'pressure_hpa' ? `${(v * 0.02953).toFixed(2)} inHg` : '';
+  const plain = word(f, v);
+  return {main, other, word: plain, extra: [other, plain].filter(Boolean).join(' · ')};
+}
 const GAP_S = 60, LIVE_GAP_S = 5; /* Published points are 10 s apart, live ones 1 s. */
 /* Where the brain uploads over the internet. Both values are public by design: the key can only
  * call the read and upload functions in supabase/schema.sql, and uploads also need the brain's own key. */
@@ -123,9 +164,19 @@ function sortedIds() {
   return ids.sort((a, b) => colours.get(a) - colours.get(b));
 }
 
+/* Newest reading time across all sensors, or 0. */
+const newestReading = () => Math.max(0, ...[...view.nodes.values()].map(s => s.last || s.t[s.t.length - 1] || 0));
+/* The graphs end now, unless nothing arrived within the chosen range: then they end at the newest
+ * reading, so a short range shows the last minutes of data instead of an empty graph. */
+function windowEnd() {
+  const newest = newestReading();
+  return source !== 'live' && newest && view.generated_at_s - newest > span ? newest + 1 : view.generated_at_s;
+}
+const spanName = () => (document.querySelector(`button[data-seconds="${span}"]`) || {}).textContent || ago(span);
+
 function drawChart(field) {
   const box = document.getElementById('c-' + field);
-  const t0 = view.generated_at_s - span, xlo = t0, xhi = view.generated_at_s;
+  const xhi = windowEnd(), t0 = xhi - span, xlo = t0;
   const lines = [];
   for (const id of sortedIds()) {
     const s = view.nodes.get(id);
@@ -134,7 +185,7 @@ function drawChart(field) {
   }
   if (!lines.length) { box.innerHTML = '<p class="hint">No readings in this range.</p>'; return; }
   const W = box.clientWidth || 600, H = 220, L = 64, R = 8, T = 18, B = 24;
-  const ys = lines.flatMap(l => l.idx.map(i => l.s[field][i]));
+  const ys = lines.flatMap(l => l.idx.map(i => shown(field, l.s[field][i])));
   let lo = Math.min(...ys), hi = Math.max(...ys);
   if (hi - lo < 1e-9) { lo -= 1; hi += 1; }
   const pad = (hi - lo) * 0.08; lo -= pad; hi += pad;
@@ -148,7 +199,7 @@ function drawChart(field) {
     const gap = s.live ? LIVE_GAP_S : view.gap_s || GAP_S;
     let d = '', prev = null;
     for (const i of idx) {
-      d += (prev === null || s.t[i] - prev > gap ? 'M' : 'L') + x(s.t[i]).toFixed(1) + ',' + y(s[field][i]).toFixed(1);
+      d += (prev === null || s.t[i] - prev > gap ? 'M' : 'L') + x(s.t[i]).toFixed(1) + ',' + y(shown(field, s[field][i])).toFixed(1);
       prev = s.t[i];
     }
     const c = colour(id);
@@ -163,22 +214,45 @@ function drawChart(field) {
     const r = el.getBoundingClientRect(), px = (e.clientX - r.left) / r.width * W, py = (e.clientY - r.top) / r.height * H;
     let best = null, bestD = Infinity;
     for (const l of lines) for (const i of l.idx) { /* nearest point on screen, across all sensors */
-      const d = Math.abs(x(l.s.t[i]) - px) * 4 + Math.abs(y(l.s[field][i]) - py);
+      const d = Math.abs(x(l.s.t[i]) - px) * 4 + Math.abs(y(shown(field, l.s[field][i])) - py);
       if (d < bestD) { bestD = d; best = {l, i}; }
     }
-    const {l, i} = best, cx = x(l.s.t[i]), cy = y(l.s[field][i]);
+    const {l, i} = best, cx = x(l.s.t[i]), cy = y(shown(field, l.s[field][i]));
     cursor.setAttribute('x1', cx); cursor.setAttribute('x2', cx); cursor.setAttribute('visibility', 'visible');
     dot.setAttribute('cx', cx); dot.setAttribute('cy', cy); dot.setAttribute('fill', colour(l.id).stroke); dot.setAttribute('visibility', 'visible');
-    readout.textContent = `${label(l.id)} · ${fmtTime(l.s.t[i])} · ${l.s[field][i].toFixed(FIELDS[field].digits)} ${FIELDS[field].unit}`;
+    const v = describe(field, l.s[field][i]);
+    readout.textContent = `${label(l.id)} · ${fmtTime(l.s.t[i])} · ${v.main}${v.extra ? ' (' + v.extra + ')' : ''}`;
   });
   el.addEventListener('pointerleave', () => { cursor.setAttribute('visibility', 'hidden'); dot.setAttribute('visibility', 'hidden'); readout.textContent = ''; });
+}
+
+/* Under each graph's explanation: every sensor's latest value in the range, in words, and for pressure its trend. */
+function renderNow(field, end) {
+  const parts = [];
+  for (const id of sortedIds()) {
+    const s = view.nodes.get(id);
+    const idx = s.t.map((t, i) => i).filter(i => s[field][i] !== null && s.t[i] <= end && s.t[i] >= end - span);
+    if (!idx.length) continue;
+    const v = describe(field, s[field][idx[idx.length - 1]]);
+    let text = `<strong>${v.main}</strong>${v.other ? ` (${v.other})` : ''}${v.word ? ` — <span class="word">${v.word}</span>` : ''}`;
+    if (field === 'pressure_hpa' && idx.length > 1) {
+      const change = s[field][idx[idx.length - 1]] - s[field][idx[0]];
+      text += Math.abs(change) < 0.3 ? ' · steady over the range shown' : ` · ${change > 0 ? 'rising' : 'falling'} ${Math.abs(change).toFixed(1)} hPa over the range shown`;
+    }
+    parts.push((view.nodes.size > 1 ? esc(label(id)) + ': ' : '') + text);
+  }
+  document.getElementById('now-' + field).innerHTML = parts.length ? 'Latest: ' + parts.join(' &nbsp;|&nbsp; ') : '';
 }
 
 function renderSensors(now, silentAfter) {
   const rows = sortedIds().map(id => {
     const s = view.nodes.get(id), n = s.t.length;
     const last = s.last || (n ? s.t[n - 1] : 0), silent = !last || now - last > silentAfter;
-    const value = f => n && s[f][n - 1] !== null ? `${s[f][n - 1].toFixed(FIELDS[f].digits)} ${FIELDS[f].unit}` : '—';
+    const value = f => {
+      if (!n || s[f][n - 1] === null) return '—';
+      const v = describe(f, s[f][n - 1]);
+      return `${v.main}${v.extra ? `<small>${v.extra}</small>` : ''}`;
+    };
     const signal = Number.isFinite(s.rssi) && s.rssi > -127 ? `${s.rssi} dBm · ${signalWord(s.rssi)}` : '—';
     const c = colour(id);
     return `<tr class="${silent ? 'silent' : ''}"><td><span class="swatch" style="border-color:${c.stroke};border-top-style:${c.dash ? 'dashed' : 'solid'}"></span><span title="${esc(id)}">${esc(label(id))}</span></td>` +
@@ -218,11 +292,15 @@ function render() {
       ` (${new Date(last * 1000).toLocaleString()}), published ${ago(now - view.generated_at_s)} ago · one point every ${view.step_s} s`;
   }
   renderSensors(now, silentAfter);
-  for (const f in FIELDS) drawChart(f);
-  const rows = [['received_at', 'sensor', ...Object.keys(FIELDS)].join(',')];
+  const end = windowEnd(), note = document.getElementById('range-note');
+  note.hidden = !(count && end < view.generated_at_s);
+  if (!note.hidden) note.textContent = `No readings in the last ${spanName()}. The graphs show the ${spanName()} up to the newest reading, at ${new Date(newestReading() * 1000).toLocaleTimeString()}.`;
+  for (const f in FIELDS) { drawChart(f); renderNow(f, end); }
+  const rows = [['received_at', 'sensor', ...Object.keys(FIELDS), 'temperature_f'].join(',')];
   for (const id of sortedIds()) {
     const s = view.nodes.get(id);
-    s.t.forEach((t, i) => rows.push([new Date(t * 1000).toISOString(), id, ...Object.keys(FIELDS).map(f => s[f][i] ?? '')].join(',')));
+    s.t.forEach((t, i) => rows.push([new Date(t * 1000).toISOString(), id, ...Object.keys(FIELDS).map(f => s[f][i] ?? ''),
+      s.temperature_c[i] === null ? '' : toF(s.temperature_c[i]).toFixed(2)].join(',')));
   }
   const link = document.getElementById('download');
   URL.revokeObjectURL(link.href);
@@ -360,7 +438,8 @@ async function loadCloud() {
   const r = await fetch(SUPABASE.url + '/rest/v1/rpc/bme280_series', {
     method: 'POST', cache: 'no-store',
     headers: {apikey: SUPABASE.key, 'Content-Type': 'application/json'},
-    body: JSON.stringify({window_s: Math.max(span, 300)}),
+    /* Short ranges fetch the last hour (still one point a second) so they can show the newest minutes even when they are not recent. */
+    body: JSON.stringify({window_s: Math.max(span, 3600)}),
   });
   if (!r.ok) throw new Error('HTTP ' + r.status);
   const j = await r.json();
@@ -387,6 +466,14 @@ async function load() {
 }
 
 document.querySelectorAll('button[data-seconds]').forEach(b => b.addEventListener('click', () => setSpan(+b.dataset.seconds)));
+function setUnit(unit) {
+  tempUnit = unit;
+  try { localStorage.setItem('mess-temp-unit', unit); } catch (e) { /* not remembered; still switches */ }
+  document.querySelectorAll('button[data-unit]').forEach(b => b.setAttribute('aria-pressed', b.dataset.unit === unit));
+  if (view) render();
+}
+document.querySelectorAll('button[data-unit]').forEach(b => b.addEventListener('click', () => setUnit(b.dataset.unit)));
+setUnit(tempUnit);
 let resizeTimer;
 addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => view && render(), 150); });
 const connect = document.getElementById('connect');
