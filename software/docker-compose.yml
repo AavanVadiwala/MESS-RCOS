@@ -24,6 +24,21 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    develop:
+      watch:
+        # Backend: copy server.js into the container and restart Node
+        - action: sync+restart
+          path: ./web/server.js
+          target: /app/server.js
+        # Frontend: automatically rebuild so vite build reruns
+        - action: rebuild
+          path: ./web/frontend/my-react-app-js
+          ignore:
+            - node_modules/
+            - dist/
+        # New dependencies: automatically rebuild
+        - action: rebuild
+          path: ./web/package.json
 
   shiny:
     build: ./web/R
