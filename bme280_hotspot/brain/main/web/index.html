@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MESS BME280 Brain</title>
+<style>
+  :root { --ink:#000; --muted:#555; --rule:#ccc; --grid:#e4e4e4; --bg:#fff;
+          --s0:#2563eb; --s1:#dc2626; --s2:#16a34a; --s3:#9333ea; --s4:#ea580c; --s5:#0891b2; --s6:#a16207; --s7:#db2777; }
+  @media (prefers-color-scheme: dark) { :root { --ink:#eee; --muted:#aaa; --rule:#444; --grid:#2a2a2a; --bg:#111;
+          --s0:#60a5fa; --s1:#f87171; --s2:#4ade80; --s3:#c084fc; --s4:#fb923c; --s5:#22d3ee; --s6:#facc15; --s7:#f472b6; } }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:Arial,Helvetica,sans-serif; }
+  main { max-width:1100px; margin:0 auto; padding:20px 16px 40px; }
+  h1 { margin:0 0 4px; font-size:28px; }
+  .lede,.hint,footer { color:var(--muted); font-size:13px; }
+  .banner { border:2px solid var(--ink); padding:12px; margin:16px 0; }
+  .banner.stale { border-style:dashed; }
+  .table-wrap { overflow-x:auto; margin-bottom:16px; border:1px solid var(--rule); }
+  table { border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums; }
+  th, td { text-align:left; padding:8px 12px; border-bottom:1px solid var(--rule); white-space:nowrap; }
+  th { font-size:12px; color:var(--muted); font-weight:normal; }
+  td.num { font-size:18px; font-weight:bold; }
+  tr:last-child td { border-bottom:none; }
+  tr.silent td { color:var(--muted); }
+  .swatch { display:inline-block; width:22px; height:0; border-top:3px solid; vertical-align:middle; margin-right:6px; }
+  .legend { display:flex; flex-wrap:wrap; gap:4px 14px; font-size:12px; color:var(--muted); margin-bottom:4px; }
+  .controls { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+  button { font:inherit; font-size:13px; background:var(--bg); color:var(--ink); border:1px solid var(--ink); padding:6px 12px; cursor:pointer; }
+  button[aria-pressed="true"] { background:var(--ink); color:var(--bg); }
+  .panel { border:1px solid var(--rule); padding:14px; margin-bottom:16px; }
+  .panel h2 { margin:0; font-size:18px; }
+  .panel .hint { margin:2px 0 8px; }
+  svg { display:block; width:100%; height:200px; overflow:visible; }
+  svg text { fill:var(--muted); font-size:11px; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<main>
+  <h1>MESS BME280 Brain</h1>
+  <p class="lede">Served by the brain ESP32 itself. Each sensor sends its readings to the brain over the brain's own Wi-Fi hotspot; no computer or internet is involved.</p>
+  <div id="banner" class="banner">Connecting to the brain…</div>
+  <p id="relay" class="hint" hidden></p>
+  <div class="controls" role="group" aria-label="Time range">
+    <button data-seconds="60" aria-pressed="false">1 minute</button>
+    <button data-seconds="300" aria-pressed="true">5 minutes</button>
+    <button data-seconds="600" aria-pressed="false">10 minutes</button>
+  </div>
+  <div class="table-wrap">
+    <table aria-label="Sensors">
+      <thead><tr><th>Sensor</th><th>Temperature</th><th>Humidity</th><th>Pressure</th><th>Signal</th><th>Received</th><th>Missed</th><th>Last reading</th></tr></thead>
+      <tbody id="sensor-rows"><tr><td colspan="8" class="hint">No sensors yet.</td></tr></tbody>
+    </table>
+  </div>
+  <section class="panel"><h2>Temperature</h2><p class="hint">°C · nearby board heat can raise this</p><div id="c-temperature_c"></div></section>
+  <section class="panel"><h2>Relative humidity</h2><p class="hint">%RH · breathe on the sensor to see it rise</p><div id="c-humidity_pct"></div></section>
+  <section class="panel"><h2>Pressure</h2><p class="hint">hPa · local absolute pressure, not sea-level corrected</p><div id="c-pressure_hpa"></div></section>
+  <footer>Each sensor is named by the last four characters of its board ID and keeps its colour on every graph. The brain keeps the last 1,200 readings in memory (10 minutes for two sensors); a restart clears them. Gaps mean no reading arrived; no values are filled in.</footer>
+</main>
+<script>
+const FIELDS = {temperature_c: {unit: '°C', digits: 2}, humidity_pct: {unit: '%RH', digits: 1}, pressure_hpa: {unit: 'hPa', digits: 2}};
+const SILENT_S = 5;
+/* One entry per sensor: {t: [], temperature_c: [], humidity_pct: [], pressure_hpa: [], boot, sequence, missed, rssi}. */
+const nodes = new Map();
+const colours = new Map(); /* sensor ID -> palette slot */
+const link = {after: 0, reached: 0, ok: false, uptime: 0};
+let span = 300;
+/* Visitor relay: this page uploads the brain's readings to the live site over the visitor's own
+ * internet (phones keep mobile data on this internet-less hotspot). Settings come from /relay. */
+const relay = {config: null, pending: [], uploaded: 0, last: 0, state: 'off', status: 0};
+const RELAY_BATCH = 200, RELAY_MAX = 5000, RELAY_EVERY_MS = 10000;
+
+const ago = s => s < 90 ? Math.round(s) + ' s' : Math.round(s / 60) + ' min';
+const fmtTime = t => new Date(t * 1000).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: '2-digit'});
+const signalWord = dbm => dbm >= -60 ? 'strong' : dbm >= -75 ? 'fair' : 'weak';
+const label = id => '…' + id.slice(-4);
+
+function colour(id) {
+  if (!colours.has(id)) colours.set(id, colours.size);
+  const slot = colours.get(id);
+  return {stroke: `var(--s${slot % 8})`, dash: slot < 8 ? '' : '6 3'};
+}
+const swatch = id => `<span class="swatch" style="border-color:${colour(id).stroke};border-top-style:${colour(id).dash ? 'dashed' : 'solid'}"></span>`;
+
+function sortedIds() {
+  const ids = [...nodes.keys()].sort();
+  ids.forEach(colour); /* new sensors get the next colours, alphabetically */
+  return ids.sort((a, b) => colours.get(a) - colours.get(b));
+}
+
+function niceTicks(lo, hi, n) {
+  const raw = (hi - lo) / n, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(s => s >= raw);
+  const out = [];
+  for (let v = Math.ceil(lo / step) * step; v <= hi + step * 1e-9; v += step) out.push(+v.toFixed(10));
+  return {ticks: out, step};
+}
+
+function drawChart(field, now) {
+  const box = document.getElementById('c-' + field);
+  const t0 = now - span;
+  const lines = [];
+  for (const id of sortedIds()) {
+    const s = nodes.get(id), idx = s.t.map((t, i) => i).filter(i => s.t[i] >= t0);
+    if (idx.length) lines.push({id, s, idx});
+  }
+  if (!lines.length) { box.innerHTML = '<p class="hint">No readings in this range yet.</p>'; return; }
+  const W = box.clientWidth || 600, H = 200, L = 64, R = 8, T = 12, B = 24;
+  const ys = lines.flatMap(l => l.idx.map(i => l.s[field][i]));
+  let lo = Math.min(...ys), hi = Math.max(...ys);
+  if (hi - lo < 0.05) { const mid = (hi + lo) / 2; lo = mid - 0.05; hi = mid + 0.05; }
+  const pad = (hi - lo) * 0.08; lo -= pad; hi += pad;
+  const x = t => L + (t - t0) / span * (W - L - R);
+  const y = v => T + (hi - v) / (hi - lo) * (H - T - B);
+  const yt = niceTicks(lo, hi, 4), digits = Math.max(0, -Math.floor(Math.log10(yt.step)));
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${field} for ${lines.length} sensor(s) over the last ${ago(span)}">`;
+  for (const v of yt.ticks) svg += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v.toFixed(digits)}</text>`;
+  for (let k = 0; k <= 4; k++) { const t = t0 + k * span / 4; svg += `<text x="${x(t)}" y="${H - 6}" text-anchor="middle">${fmtTime(t)}</text>`; }
+  for (const {id, s, idx} of lines) {
+    let d = '', prev = null;
+    for (const i of idx) {
+      d += (prev === null || s.t[i] - prev > SILENT_S ? 'M' : 'L') + x(s.t[i]).toFixed(1) + ',' + y(s[field][i]).toFixed(1);
+      prev = s.t[i];
+    }
+    const c = colour(id), last = idx[idx.length - 1];
+    svg += `<path d="${d}" fill="none" stroke="${c.stroke}" stroke-dasharray="${c.dash}" stroke-width="1.8" stroke-linejoin="round"/>`;
+    svg += `<circle cx="${x(s.t[last])}" cy="${y(s[field][last])}" r="3.5" fill="${c.stroke}"/>`;
+  }
+  const legend = lines.length > 1 ? '<div class="legend">' + lines.map(({id}) => `<span>${swatch(id)}${label(id)}</span>`).join('') + '</div>' : '';
+  box.innerHTML = legend + svg + '</svg>';
+}
+
+function render() {
+  const now = Date.now() / 1000, banner = document.getElementById('banner'), ids = sortedIds();
+  const newest = Math.max(0, ...ids.map(id => { const s = nodes.get(id); return s.t[s.t.length - 1] || 0; }));
+  const age = newest ? now - newest : Infinity, live = ids.filter(id => now - (nodes.get(id).t.at(-1) || 0) <= SILENT_S);
+  banner.className = 'banner' + (link.ok && live.length ? '' : ' stale');
+  if (!link.ok) banner.innerHTML = `<strong>BRAIN UNREACHABLE</strong> — ${link.reached ? 'lost contact ' + ago(now - link.reached) + ' ago. ' : ''}Stay joined to the brain's Wi-Fi hotspot and keep the brain powered.`;
+  else if (!ids.length) banner.innerHTML = '<strong>WAITING FOR SENSORS</strong> — the brain is up but has no readings yet. Power a sensor board and keep it nearby.';
+  else if (!live.length) banner.innerHTML = `<strong>SENSORS SILENT</strong> — no reading for ${ago(age)}. The brain is fine; check the sensors' power and distance.`;
+  else banner.innerHTML = `<strong>LIVE OVER WI-FI</strong> — ${live.length} of ${ids.length} sensor${ids.length === 1 ? '' : 's'} reporting → brain ESP32 → this page, one reading a second each`;
+  document.getElementById('sensor-rows').innerHTML = ids.map(id => {
+    const s = nodes.get(id), n = s.t.length, last = s.t[n - 1], silent = now - last > SILENT_S;
+    const value = f => `${s[f][n - 1].toFixed(FIELDS[f].digits)} ${FIELDS[f].unit}`;
+    const signal = Number.isFinite(s.rssi) && s.rssi > -127 ? `${s.rssi} dBm · ${signalWord(s.rssi)}` : '—';
+    return `<tr class="${silent ? 'silent' : ''}"><td>${swatch(id)}<span title="${id}">${label(id)}</span></td>` +
+      `<td class="num">${value('temperature_c')}</td><td class="num">${value('humidity_pct')}</td><td class="num">${value('pressure_hpa')}</td>` +
+      `<td>${signal}</td><td>${s.received.toLocaleString()}</td><td>${s.missed.toLocaleString()}</td><td>${ago(now - last)} ago${silent ? ' (silent)' : ''}</td></tr>`;
+  }).join('') || '<tr><td colspan="8" class="hint">No sensors yet.</td></tr>';
+  for (const f in FIELDS) drawChart(f, now);
+}
+
+function clear() {
+  nodes.clear();
+  link.after = 0;
+}
+
+async function poll() {
+  try {
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 3000);
+    const r = await fetch('/data?after=' + link.after, {cache: 'no-store', signal: ctl.signal});
+    clearTimeout(timer);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json(), now = Date.now();
+    if (j.now_ms < link.uptime) { clear(); link.uptime = 0; return poll(); } /* the brain restarted */
+    link.uptime = j.now_ms;
+    for (const [id, receivedMs, node, boot, sequence, t, h, p, rssi] of j.readings) {
+      if (!nodes.has(node)) nodes.set(node, {t: [], temperature_c: [], humidity_pct: [], pressure_hpa: [], boot: null, sequence: 0, missed: 0, received: 0, rssi: null});
+      const s = nodes.get(node);
+      s.t.push((now - (j.now_ms - receivedMs)) / 1000);
+      s.temperature_c.push(t); s.humidity_pct.push(h); s.pressure_hpa.push(p);
+      /* Each sensor numbers its readings; a jump within one sensor boot is a reading lost on the way. */
+      if (boot === s.boot && sequence > s.sequence) s.missed += sequence - s.sequence - 1;
+      Object.assign(s, {boot, sequence, rssi, received: s.received + 1});
+      link.after = id;
+      if (relay.config) relay.pending.push({node_id: node, boot_id: boot, sequence, temperature_c: t, humidity_pct: h,
+        pressure_hpa: p, rssi_dbm: Number.isInteger(rssi) && rssi >= -127 && rssi <= 0 ? rssi : -127,
+        brain_age_ms: j.now_ms - receivedMs, seen_at: now});
+    }
+    if (relay.pending.length > RELAY_MAX) relay.pending.splice(0, relay.pending.length - RELAY_MAX);
+    for (const s of nodes.values()) {
+      const keep = s.t.findIndex(t => t >= now / 1000 - 600);
+      if (keep > 0) for (const k of ['t', ...Object.keys(FIELDS)]) s[k].splice(0, keep);
+    }
+    link.ok = true; link.reached = now / 1000;
+  } catch (e) {
+    link.ok = false;
+  }
+}
+
+document.querySelectorAll('button[data-seconds]').forEach(b => b.addEventListener('click', () => {
+  span = +b.dataset.seconds;
+  document.querySelectorAll('button[data-seconds]').forEach(o => o.setAttribute('aria-pressed', o === b));
+  render();
+}));
+let resizeTimer;
+addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(render, 150); });
+async function upload() {
+  if (!relay.config || !relay.pending.length) return;
+  const batch = relay.pending.slice(0, RELAY_BATCH), now = Date.now();
+  const readings = batch.map(({brain_age_ms, seen_at, ...r}) => ({...r, age_ms: brain_age_ms + (now - seen_at)}));
+  try {
+    const r = await fetch(relay.config.url + '/rest/v1/rpc/add_bme280_readings', {
+      method: 'POST', cache: 'no-store', signal: AbortSignal.timeout(15000),
+      headers: {apikey: relay.config.key, 'Content-Type': 'application/json'},
+      body: JSON.stringify({upload_key: relay.config.upload_key, readings})});
+    if (r.status >= 500 || r.status === 429) throw new Error('HTTP ' + r.status);
+    relay.pending.splice(0, batch.length); /* stored, duplicate or rejected: never resend the same batch forever */
+    if (r.ok) { relay.uploaded += batch.length; relay.last = Date.now() / 1000; relay.state = 'ok'; }
+    else { relay.state = 'rejected'; relay.status = r.status; }
+  } catch (e) {
+    relay.state = 'offline'; /* no internet on this device right now; keep the readings and retry */
+  }
+}
+
+function renderRelay() {
+  const el = document.getElementById('relay');
+  el.hidden = !relay.config;
+  if (!relay.config) return;
+  const waiting = relay.pending.length ? ` ${relay.pending.length.toLocaleString()} waiting.` : '';
+  el.textContent = relay.state === 'ok'
+    ? `Live site: updated through this device's internet — ${relay.uploaded.toLocaleString()} readings sent, last ${ago(Date.now() / 1000 - relay.last)} ago.${waiting} Keep this page open to keep orangetangy.github.io/mess-gas-sensor live.`
+    : relay.state === 'offline'
+    ? `Live site: this device can't reach the internet right now (on a phone, turn mobile data on).${waiting} They'll upload when it can.`
+    : relay.state === 'rejected'
+    ? `Live site: upload rejected (HTTP ${relay.status}). The visitor key may be revoked or the database not set up.`
+    : 'Live site: sending readings through this device\'s internet…';
+}
+
+(async function loop() {
+  if (relay.state === 'off') { /* once: is the relay set up on this brain? */
+    relay.state = 'starting';
+    try {
+      const c = await (await fetch('/relay', {cache: 'no-store', signal: AbortSignal.timeout(3000)})).json();
+      if (c.url && c.key && c.upload_key) {
+        relay.config = c;
+        setInterval(async () => { await upload(); renderRelay(); }, RELAY_EVERY_MS);
+      }
+    } catch (e) { /* older brain firmware without /relay */ }
+  }
+  await poll();
+  render();
+  renderRelay();
+  setTimeout(loop, 1000);
+})();
+</script>
+</body>
+</html>

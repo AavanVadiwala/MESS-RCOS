@@ -1,0 +1,17 @@
+menu "MESS BME280"
+config MESS_BME_SDA
+    int "I2C SDA GPIO"
+    default 21
+config MESS_BME_SCL
+    int "I2C SCL GPIO"
+    default 22
+config MESS_BME_WIFI_SSID
+    string "Wi-Fi SSID, 2.4 GHz (empty = serial only)"
+    default ""
+config MESS_BME_WIFI_PASSWORD
+    string "Wi-Fi password"
+    default ""
+config MESS_BME_SERVER_URL
+    string "Receiver URL (gateway ESP32 is 192.168.4.1; a laptop needs its IP, never localhost)"
+    default "http://192.168.4.1/readings"
+endmenu
