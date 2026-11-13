@@ -3,6 +3,10 @@ import './App.css'
 import TableBME from './components/TableBME';
 import TableSGP from './components/TableSGP';
 import TableBH from './components/TableBH';
+import GraphBME from './components/TableBME';
+import GraphBH from './components/TableBH';
+import GraphSGP from './components/TableSGP';
+
 
 //diplay basic info on MESS, what it is and what the sensors do
 //diplay the table of data on the different sensors
@@ -46,7 +50,8 @@ function App() {
     {web_state === 'bme'&& (
       <>
       <h2>BME280</h2>
-      <TableBME></TableBME>
+      <TableBME/>
+      
       </>
     )}
     {web_state === 'sgp'&&(
