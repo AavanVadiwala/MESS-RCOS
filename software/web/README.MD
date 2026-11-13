@@ -1,18 +1,62 @@
-## MESS-RCOS DATA RECIEVER
+# how to use
+
+docker compose up --build will work but for deployment
+Ive wrapped it in start.js the only difference is it prints a qr 
+code before running docker compose up that can be scanned
+
+thats pretty much it, if you want to seed db with fake data
+start it and then run any of the python files in db/db_test/
 
 
-This is a web server to receive data from the ESP 32 Mesh network over HTTP.
-This assumes at least one node is connected to the same network as the device running this and that the esp32 is sending data in json form to this server (port 3000)
-
-to start: 
-
-``docker compose up --build`` 
-
-Services:
-
-port 5432 PG serer
-port 3000 web frontend
-port 3838 shiny server
 
 
-To seed the DB run random_input,py in db/db_test/ it will add 10 fake records per sensor per run for debug.
+
+
+
+# How to send data
+
+`POST http://<server>:3000/data` with header `Content-Type: application/json`
+
+
+Multiple readings can arrive in one request but data from different sensors must be made in seperate requests.
+
+You can NOT have any blank fields, all fields for a sensor must be populated,
+
+## bme280
+
+```json
+{
+  "sensor": "bme280",
+  "sensor_id": 1,
+  "loc": "Room 101",
+  "readings": [
+    { "time": "2026-11-13T12:00:00Z", "temperature": 22.6, "humidity": 44.9, "pressure": 1012.9 }
+  ]
+}
+```
+
+## sgp30
+
+```json
+{
+  "sensor": "sgp30",
+  "sensor_id": 1,
+  "loc": "Room 101",
+  "readings": [
+    { "time": "2026-11-13T12:00:00Z", "eco2": 412, "tvoc": 15 }
+  ]
+}
+```
+
+## bh1750
+
+```json
+{
+  "sensor": "bh1750",
+  "sensor_id": 1,
+  "loc": "Room 101",
+  "readings": [
+    { "time": "2026-11-13T12:00:00Z", "lux": 320 }
+  ]
+}
+```
