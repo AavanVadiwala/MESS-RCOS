@@ -1,27 +1,9 @@
-import data from "../../public/dummy_data.json";
+import SensorTable from "./SensorTable";
 
-// apparently vite parses json files by default sooooooo
+const COLUMNS = [{ key: "lux", label: "Lux (lx)" }];
+
 function TableBH() {
-  // TODO: make it automatically display the header of what is being read, actually,
-  // just request that the data from each sensor is read seperately
-  // table currently hardcoded, make it dynamic later
-
-  // time is used as the key due to it being unique, also a bit more reliable
-  const listitem = data.bh1750.readings.map((r) => (
-    <tr key={r.time}>
-      <th>{r.time}</th>
-      <th>{r.lux}</th>
-    </tr>
-  ));
-  return (
-    <table>
-      <tr>
-        <th>Time</th>
-        <th>Lux* ({data.bh1750.unit.lux})</th>
-      </tr>
-      {listitem}
-    </table>
-  );
+  return <SensorTable type="bh1750" columns={COLUMNS} />;
 }
 
 export default TableBH;
