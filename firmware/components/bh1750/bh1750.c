@@ -4,9 +4,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#define BH1750_I2C_PORT I2C_NUM_0
-#define BH1750_SDA_PIN GPIO_NUM_21
-#define BH1750_SCL_PIN GPIO_NUM_22
+#include "sdkconfig.h"
 #define BH1750_I2C_ADDRESS 0x23
 #define BH1750_MEASUREMENT_MODE 0x20
 #define BH1750_CONVERSION_TIME_MS 180
@@ -18,12 +16,12 @@ esp_err_t bh1750_init(void)
 {
     if (sensor_handle) return ESP_OK;
 
-    esp_err_t error = i2c_master_get_bus_handle(BH1750_I2C_PORT, &bus_handle);
+    esp_err_t error = i2c_master_get_bus_handle(CONFIG_MESS_I2C_PORT, &bus_handle);
     if (error == ESP_ERR_INVALID_STATE) {
         i2c_master_bus_config_t bus_config = {
-            .i2c_port = BH1750_I2C_PORT,
-            .sda_io_num = BH1750_SDA_PIN,
-            .scl_io_num = BH1750_SCL_PIN,
+            .i2c_port = CONFIG_MESS_I2C_PORT,
+            .sda_io_num = CONFIG_MESS_I2C_SDA,
+            .scl_io_num = CONFIG_MESS_I2C_SCL,
             .clk_source = I2C_CLK_SRC_DEFAULT,
             .glitch_ignore_cnt = 7,
             .flags.enable_internal_pullup = true,

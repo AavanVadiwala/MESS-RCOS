@@ -7,9 +7,7 @@
 #include "driver/i2c_master.h"
 #include "esp_err.h"
 
-#define I2C_PORT I2C_NUM_0
-#define SDA_PIN GPIO_NUM_21
-#define SCL_PIN GPIO_NUM_22
+#include "sdkconfig.h"
 
 #define SGP30_ADDRESS 0x58
 
@@ -97,13 +95,13 @@ esp_err_t sgp30_init(void)
 
     // The bus is shared with the other I2C sensors; create it only if
     // nobody has yet.
-    esp_err_t error = i2c_master_get_bus_handle(I2C_PORT, &bus_handle);
+    esp_err_t error = i2c_master_get_bus_handle(CONFIG_MESS_I2C_PORT, &bus_handle);
     if (error == ESP_ERR_INVALID_STATE)
     {
         i2c_master_bus_config_t bus_config = {
-            .i2c_port = I2C_PORT,
-            .sda_io_num = SDA_PIN,
-            .scl_io_num = SCL_PIN,
+            .i2c_port = CONFIG_MESS_I2C_PORT,
+            .sda_io_num = CONFIG_MESS_I2C_SDA,
+            .scl_io_num = CONFIG_MESS_I2C_SCL,
             .clk_source = I2C_CLK_SRC_DEFAULT,
             .glitch_ignore_cnt = 7,
             .flags.enable_internal_pullup = true
