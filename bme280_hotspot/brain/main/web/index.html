@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MESS BME280 Brain</title>
+<title>MESS Sensor Brain</title>
 <style>
   :root { --ink:#000; --muted:#555; --rule:#ccc; --grid:#e4e4e4; --bg:#fff;
           --s0:#2563eb; --s1:#dc2626; --s2:#16a34a; --s3:#9333ea; --s4:#ea580c; --s5:#0891b2; --s6:#a16207; --s7:#db2777; }
@@ -37,7 +37,7 @@
 </head>
 <body>
 <main>
-  <h1>MESS BME280 Brain</h1>
+  <h1>MESS Sensor Brain</h1>
   <p class="lede">Served by the brain ESP32 itself. Each sensor sends its readings to the brain over the brain's own Wi-Fi hotspot; no computer or internet is involved.</p>
   <div id="banner" class="banner">Connecting to the brain…</div>
   <p id="relay" class="hint" hidden></p>
@@ -48,19 +48,23 @@
   </div>
   <div class="table-wrap">
     <table aria-label="Sensors">
-      <thead><tr><th>Sensor</th><th>Temperature</th><th>Humidity</th><th>Pressure</th><th>Signal</th><th>Received</th><th>Missed</th><th>Last reading</th></tr></thead>
-      <tbody id="sensor-rows"><tr><td colspan="8" class="hint">No sensors yet.</td></tr></tbody>
+      <thead><tr><th>Sensor</th><th>Temperature</th><th>Humidity</th><th>Pressure</th><th>Light</th><th>TVOC</th><th>eCO₂</th><th>Signal</th><th>Received</th><th>Missed</th><th>Last reading</th></tr></thead>
+      <tbody id="sensor-rows"><tr><td colspan="11" class="hint">No sensors yet.</td></tr></tbody>
     </table>
   </div>
   <section class="panel"><h2>Temperature</h2><p class="hint">°C · nearby board heat can raise this</p><div id="c-temperature_c"></div></section>
   <section class="panel"><h2>Relative humidity</h2><p class="hint">%RH · breathe on the sensor to see it rise</p><div id="c-humidity_pct"></div></section>
   <section class="panel"><h2>Pressure</h2><p class="hint">hPa · local absolute pressure, not sea-level corrected</p><div id="c-pressure_hpa"></div></section>
+  <section class="panel"><h2>Light</h2><p class="hint">lx · BH1750; cover it or shine a phone light on it to see it change</p><div id="c-lux"></div></section>
+  <section class="panel"><h2>TVOC</h2><p class="hint">ppb · SGP30 total volatile organic compounds; starts after a 15 s warm-up</p><div id="c-tvoc_ppb"></div></section>
+  <section class="panel"><h2>eCO₂</h2><p class="hint">ppm · SGP30 estimate from VOCs, not a direct CO₂ measurement</p><div id="c-eco2_ppm"></div></section>
   <footer>Each sensor is named by the last four characters of its board ID and keeps its colour on every graph. The brain keeps the last 1,200 readings in memory (10 minutes for two sensors); a restart clears them. Gaps mean no reading arrived; no values are filled in.</footer>
 </main>
 <script>
-const FIELDS = {temperature_c: {unit: '°C', digits: 2}, humidity_pct: {unit: '%RH', digits: 1}, pressure_hpa: {unit: 'hPa', digits: 2}};
+const FIELDS = {temperature_c: {unit: '°C', digits: 2}, humidity_pct: {unit: '%RH', digits: 1}, pressure_hpa: {unit: 'hPa', digits: 2},
+  lux: {unit: 'lx', digits: 0}, tvoc_ppb: {unit: 'ppb', digits: 0}, eco2_ppm: {unit: 'ppm', digits: 0}};
 const SILENT_S = 5;
-/* One entry per sensor: {t: [], temperature_c: [], humidity_pct: [], pressure_hpa: [], boot, sequence, missed, rssi}. */
+/* One entry per sensor board: {t: [], <one array per FIELDS key, null where that sensor sent nothing>, boot, sequence, missed, rssi}. */
 const nodes = new Map();
 const colours = new Map(); /* sensor ID -> palette slot */
 const link = {after: 0, reached: 0, ok: false, uptime: 0};
@@ -101,7 +105,7 @@ function drawChart(field, now) {
   const t0 = now - span;
   const lines = [];
   for (const id of sortedIds()) {
-    const s = nodes.get(id), idx = s.t.map((t, i) => i).filter(i => s.t[i] >= t0);
+    const s = nodes.get(id), idx = s.t.map((t, i) => i).filter(i => s.t[i] >= t0 && s[field][i] !== null);
     if (idx.length) lines.push({id, s, idx});
   }
   if (!lines.length) { box.innerHTML = '<p class="hint">No readings in this range yet.</p>'; return; }
@@ -118,7 +122,7 @@ function drawChart(field, now) {
   for (let k = 0; k <= 4; k++) { const t = t0 + k * span / 4; svg += `<text x="${x(t)}" y="${H - 6}" text-anchor="middle">${fmtTime(t)}</text>`; }
   for (const {id, s, idx} of lines) {
     let d = '', prev = null;
-    for (const i of idx) {
+    for (const i of idx) { /* nulls were filtered out above, so a missing value also breaks the line */
       d += (prev === null || s.t[i] - prev > SILENT_S ? 'M' : 'L') + x(s.t[i]).toFixed(1) + ',' + y(s[field][i]).toFixed(1);
       prev = s.t[i];
     }
@@ -141,12 +145,12 @@ function render() {
   else banner.innerHTML = `<strong>LIVE OVER WI-FI</strong> — ${live.length} of ${ids.length} sensor${ids.length === 1 ? '' : 's'} reporting → brain ESP32 → this page, one reading a second each`;
   document.getElementById('sensor-rows').innerHTML = ids.map(id => {
     const s = nodes.get(id), n = s.t.length, last = s.t[n - 1], silent = now - last > SILENT_S;
-    const value = f => `${s[f][n - 1].toFixed(FIELDS[f].digits)} ${FIELDS[f].unit}`;
+    const value = f => s[f][n - 1] === null ? '—' : `${s[f][n - 1].toFixed(FIELDS[f].digits)} ${FIELDS[f].unit}`;
     const signal = Number.isFinite(s.rssi) && s.rssi > -127 ? `${s.rssi} dBm · ${signalWord(s.rssi)}` : '—';
     return `<tr class="${silent ? 'silent' : ''}"><td>${swatch(id)}<span title="${id}">${label(id)}</span></td>` +
-      `<td class="num">${value('temperature_c')}</td><td class="num">${value('humidity_pct')}</td><td class="num">${value('pressure_hpa')}</td>` +
+      Object.keys(FIELDS).map(f => `<td class="num">${value(f)}</td>`).join('') +
       `<td>${signal}</td><td>${s.received.toLocaleString()}</td><td>${s.missed.toLocaleString()}</td><td>${ago(now - last)} ago${silent ? ' (silent)' : ''}</td></tr>`;
-  }).join('') || '<tr><td colspan="8" class="hint">No sensors yet.</td></tr>';
+  }).join('') || '<tr><td colspan="11" class="hint">No sensors yet.</td></tr>';
   for (const f in FIELDS) drawChart(f, now);
 }
 
@@ -164,17 +168,19 @@ async function poll() {
     const j = await r.json(), now = Date.now();
     if (j.now_ms < link.uptime) { clear(); link.uptime = 0; return poll(); } /* the brain restarted */
     link.uptime = j.now_ms;
-    for (const [id, receivedMs, node, boot, sequence, t, h, p, rssi] of j.readings) {
-      if (!nodes.has(node)) nodes.set(node, {t: [], temperature_c: [], humidity_pct: [], pressure_hpa: [], boot: null, sequence: 0, missed: 0, received: 0, rssi: null});
-      const s = nodes.get(node);
+    for (const [id, receivedMs, node, boot, sequence, t, h, p, rssi, lux = null, tvoc = null, eco2 = null] of j.readings) {
+      if (!nodes.has(node)) nodes.set(node, {t: [], ...Object.fromEntries(Object.keys(FIELDS).map(f => [f, []])),
+        boot: null, sequence: 0, missed: 0, received: 0, rssi: null});
+      const s = nodes.get(node), values = {temperature_c: t, humidity_pct: h, pressure_hpa: p, lux, tvoc_ppb: tvoc, eco2_ppm: eco2};
       s.t.push((now - (j.now_ms - receivedMs)) / 1000);
-      s.temperature_c.push(t); s.humidity_pct.push(h); s.pressure_hpa.push(p);
+      for (const f in FIELDS) s[f].push(Number.isFinite(values[f]) ? values[f] : null);
       /* Each sensor numbers its readings; a jump within one sensor boot is a reading lost on the way. */
       if (boot === s.boot && sequence > s.sequence) s.missed += sequence - s.sequence - 1;
       Object.assign(s, {boot, sequence, rssi, received: s.received + 1});
       link.after = id;
-      if (relay.config) relay.pending.push({node_id: node, boot_id: boot, sequence, temperature_c: t, humidity_pct: h,
-        pressure_hpa: p, rssi_dbm: Number.isInteger(rssi) && rssi >= -127 && rssi <= 0 ? rssi : -127,
+      if (relay.config) relay.pending.push({node_id: node, boot_id: boot, sequence,
+        ...Object.fromEntries(Object.entries(values).filter(([, v]) => Number.isFinite(v))), /* only values that exist */
+        rssi_dbm: Number.isInteger(rssi) && rssi >= -127 && rssi <= 0 ? rssi : -127,
         brain_age_ms: j.now_ms - receivedMs, seen_at: now});
     }
     if (relay.pending.length > RELAY_MAX) relay.pending.splice(0, relay.pending.length - RELAY_MAX);

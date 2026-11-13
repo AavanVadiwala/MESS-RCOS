@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MESS BME280 Live</title>
+<title>MESS Sensors Live</title>
 <style>
   :root { --ink:#000; --muted:#555; --rule:#ccc; --grid:#e4e4e4; --bg:#fff; --warn:#000;
           --s0:#2563eb; --s1:#dc2626; --s2:#16a34a; --s3:#9333ea; --s4:#ea580c; --s5:#0891b2; --s6:#a16207; --s7:#db2777; }
@@ -41,8 +41,8 @@
 </head>
 <body>
 <main>
-  <h1>MESS BME280 Live</h1>
-  <p class="lede">Temperature, humidity and pressure from the MESS gas team's BME280 sensors. BME280 does not measure gas.</p>
+  <h1>MESS Sensors Live</h1>
+  <p class="lede">Temperature, humidity and pressure (BME280), light (BH1750) and air quality (SGP30) from the MESS gas team's sensor boards. eCO₂ is the SGP30's estimate from VOCs, not a direct CO₂ measurement.</p>
   <div id="banner" class="banner">Loading readings…</div>
   <p class="connect-hint" id="connect-hint">Have the brain ESP32? Plug it into this computer's USB and press <strong>Connect brain</strong> to see readings live. Nothing to install.</p>
   <div class="controls" role="group" aria-label="Time range">
@@ -51,24 +51,31 @@
     <button data-seconds="21600" aria-pressed="false">6 hours</button>
     <button data-seconds="86400" aria-pressed="false">24 hours</button>
     <button id="connect">Connect brain (USB)</button>
-    <a class="btn" id="download" download="mess-bme280.csv" href="#">Download CSV</a>
+    <a class="btn" id="download" download="mess-sensors.csv" href="#">Download CSV</a>
   </div>
   <div class="table-wrap">
     <table class="sensors" aria-label="Sensors">
-      <thead><tr><th>Sensor</th><th>Temperature</th><th>Humidity</th><th>Pressure</th><th>Signal to brain</th><th>Missed (5 min)</th><th>Last reading</th></tr></thead>
-      <tbody id="sensor-rows"><tr><td colspan="7" class="hint">No sensors yet.</td></tr></tbody>
+      <thead><tr><th>Sensor</th><th>Temperature</th><th>Humidity</th><th>Pressure</th><th>Light</th><th>TVOC</th><th>eCO₂</th><th>Signal to brain</th><th>Missed (5 min)</th><th>Last reading</th></tr></thead>
+      <tbody id="sensor-rows"><tr><td colspan="10" class="hint">No sensors yet.</td></tr></tbody>
     </table>
   </div>
   <section class="panel"><h2>Temperature</h2><p class="hint">°C · nearby board heat can raise this</p><div class="chart" id="c-temperature_c"></div></section>
   <section class="panel"><h2>Relative humidity</h2><p class="hint">%RH</p><div class="chart" id="c-humidity_pct"></div></section>
   <section class="panel"><h2>Pressure</h2><p class="hint">hPa · local absolute pressure, not sea-level corrected</p><div class="chart" id="c-pressure_hpa"></div></section>
+  <section class="panel"><h2>Light</h2><p class="hint">lx · BH1750</p><div class="chart" id="c-lux"></div></section>
+  <section class="panel"><h2>TVOC</h2><p class="hint">ppb · SGP30 total volatile organic compounds</p><div class="chart" id="c-tvoc_ppb"></div></section>
+  <section class="panel"><h2>eCO₂</h2><p class="hint">ppm · SGP30 estimate from VOCs, not a direct CO₂ measurement</p><div class="chart" id="c-eco2_ppm"></div></section>
   <footer>Each sensor is named by the last four characters of its board ID and keeps its colour on every graph. When the brain is online it uploads every 10 seconds and this page shows those readings from anywhere. Connect brain needs Chrome or Edge on a laptop or desktop; live readings show only on the computer the brain is plugged into. Otherwise this page shows readings published about every 6 minutes by a computer running the bridge; GitHub Pages can add up to 10 minutes of caching, so expect readings to be 5–20 minutes old. Gaps mean a sensor or the brain was offline; no values are filled in.</footer>
 </main>
 <script>
+/* Every value is optional: a board without a sensor, or an SGP30 still warming up, leaves it null. */
 const FIELDS = {
-  temperature_c: {unit: '°C', digits: 2},
-  humidity_pct: {unit: '%RH', digits: 1},
-  pressure_hpa: {unit: 'hPa', digits: 2},
+  temperature_c: {unit: '°C', digits: 2, min: -40, max: 85},
+  humidity_pct: {unit: '%RH', digits: 1, min: 0, max: 100},
+  pressure_hpa: {unit: 'hPa', digits: 2, min: 300, max: 1100},
+  lux: {unit: 'lx', digits: 0, min: 0, max: 65535},
+  tvoc_ppb: {unit: 'ppb', digits: 0, min: 0, max: 60000},
+  eco2_ppm: {unit: 'ppm', digits: 0, min: 400, max: 60000},
 };
 const GAP_S = 60, LIVE_GAP_S = 5; /* Published points are 10 s apart, live ones 1 s. */
 /* Where the brain uploads over the internet. Both values are public by design: the key can only
@@ -76,8 +83,8 @@ const GAP_S = 60, LIVE_GAP_S = 5; /* Published points are 10 s apart, live ones 
 const SUPABASE = {url: 'https://imaoyqoegvrdtqiqzlvh.supabase.co', key: 'sb_publishable_cTJj9EWJ9x8CFQF3MKAPFA_o5ySAsIK'};
 const CLOUD_STALE_S = 120;
 
-/* view.nodes maps a sensor ID to its readings:
- * {t: [], temperature_c: [], humidity_pct: [], pressure_hpa: [], rssi, missed, last, link}. */
+/* view.nodes maps a sensor board ID to its readings:
+ * {t: [], <one array per FIELDS key, null where missing>, rssi, missed, last, link}. */
 let view = null, span = 3600, source = 'published';
 const colours = new Map(); /* sensor ID -> palette slot, stable for the whole visit */
 
@@ -87,8 +94,13 @@ const ago = s => s < 90 ? Math.round(s) + ' s' : s < 5400 ? Math.round(s / 60) +
 const signalWord = dbm => dbm >= -60 ? 'strong' : dbm >= -75 ? 'fair' : 'weak';
 const label = id => id === 'usb' ? 'USB sensor' : id === 'sensor' ? 'Sensor' : '…' + id.slice(-4);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
-const emptySeries = () => ({t: [], temperature_c: [], humidity_pct: [], pressure_hpa: [],
+const emptySeries = () => ({t: [], ...Object.fromEntries(Object.keys(FIELDS).map(f => [f, []])),
   rssi: null, missed: null, last: 0, link: false});
+/* A value inside its field's plausible range, else null. */
+const valid = (f, v) => typeof v === 'number' && Number.isFinite(v) && v >= FIELDS[f].min && v <= FIELDS[f].max ? v : null;
+/* One column per field from a source object, padded with nulls when the source predates that field. */
+const columns = (src, n) => Object.fromEntries(Object.keys(FIELDS).map(f =>
+  [f, Array.from({length: n}, (_, i) => valid(f, (src[f] || [])[i]))]));
 
 function colour(id) {
   if (!colours.has(id)) colours.set(id, colours.size);
@@ -117,7 +129,7 @@ function drawChart(field) {
   const lines = [];
   for (const id of sortedIds()) {
     const s = view.nodes.get(id);
-    const idx = s.t.map((t, i) => i).filter(i => s.t[i] >= t0);
+    const idx = s.t.map((t, i) => i).filter(i => s.t[i] >= t0 && s[field][i] !== null);
     if (idx.length) lines.push({id, s, idx});
   }
   if (!lines.length) { box.innerHTML = '<p class="hint">No readings in this range.</p>'; return; }
@@ -166,14 +178,14 @@ function renderSensors(now, silentAfter) {
   const rows = sortedIds().map(id => {
     const s = view.nodes.get(id), n = s.t.length;
     const last = s.last || (n ? s.t[n - 1] : 0), silent = !last || now - last > silentAfter;
-    const value = f => n ? `${s[f][n - 1].toFixed(FIELDS[f].digits)} ${FIELDS[f].unit}` : '—';
+    const value = f => n && s[f][n - 1] !== null ? `${s[f][n - 1].toFixed(FIELDS[f].digits)} ${FIELDS[f].unit}` : '—';
     const signal = Number.isFinite(s.rssi) && s.rssi > -127 ? `${s.rssi} dBm · ${signalWord(s.rssi)}` : '—';
     const c = colour(id);
     return `<tr class="${silent ? 'silent' : ''}"><td><span class="swatch" style="border-color:${c.stroke};border-top-style:${c.dash ? 'dashed' : 'solid'}"></span><span title="${esc(id)}">${esc(label(id))}</span></td>` +
-      `<td class="num">${value('temperature_c')}</td><td class="num">${value('humidity_pct')}</td><td class="num">${value('pressure_hpa')}</td>` +
+      Object.keys(FIELDS).map(f => `<td class="num">${value(f)}</td>`).join('') +
       `<td>${signal}</td><td>${Number.isFinite(s.missed) ? s.missed.toLocaleString() : '—'}</td><td>${last ? ago(now - last) + ' ago' + (silent ? ' (silent)' : '') : '—'}</td></tr>`;
   });
-  document.getElementById('sensor-rows').innerHTML = rows.join('') || '<tr><td colspan="7" class="hint">No sensors yet.</td></tr>';
+  document.getElementById('sensor-rows').innerHTML = rows.join('') || '<tr><td colspan="10" class="hint">No sensors yet.</td></tr>';
 }
 
 function render() {
@@ -207,10 +219,10 @@ function render() {
   }
   renderSensors(now, silentAfter);
   for (const f in FIELDS) drawChart(f);
-  const rows = ['received_at,sensor,temperature_c,humidity_pct,pressure_hpa'];
+  const rows = [['received_at', 'sensor', ...Object.keys(FIELDS)].join(',')];
   for (const id of sortedIds()) {
     const s = view.nodes.get(id);
-    s.t.forEach((t, i) => rows.push([new Date(t * 1000).toISOString(), id, s.temperature_c[i], s.humidity_pct[i], s.pressure_hpa[i]].join(',')));
+    s.t.forEach((t, i) => rows.push([new Date(t * 1000).toISOString(), id, ...Object.keys(FIELDS).map(f => s[f][i] ?? '')].join(',')));
   }
   const link = document.getElementById('download');
   URL.revokeObjectURL(link.href);
@@ -222,7 +234,7 @@ function fromPublished(j) {
   const nodes = new Map();
   for (const n of j.nodes || [{node_id: 'sensor', ...j}]) {
     if (!n.t || !n.t.length) continue;
-    nodes.set(n.node_id, {...emptySeries(), t: n.t, temperature_c: n.temperature_c, humidity_pct: n.humidity_pct, pressure_hpa: n.pressure_hpa});
+    nodes.set(n.node_id, {...emptySeries(), t: n.t, ...columns(n, n.t.length)});
   }
   return {generated_at_s: Date.parse(j.generated_at) / 1000, step_s: j.step_s, gap_s: GAP_S, nodes};
 }
@@ -232,7 +244,7 @@ function fromCloud(j) {
   const nodes = new Map();
   for (const n of j.nodes || []) {
     const l = n.latest || {};
-    nodes.set(n.node_id, {...emptySeries(), t: n.t, temperature_c: n.temperature_c, humidity_pct: n.humidity_pct, pressure_hpa: n.pressure_hpa,
+    nodes.set(n.node_id, {...emptySeries(), t: n.t, ...columns(n, n.t.length),
       rssi: l.rssi_dbm, missed: l.missed_5min, last: l.measured_at ? Date.parse(l.measured_at) / 1000 : 0, link: true});
   }
   return {generated_at_s: Date.parse(j.generated_at) / 1000, step_s: j.step_s, gap_s: Math.max(LIVE_GAP_S, j.step_s * 3), nodes};
@@ -241,10 +253,10 @@ function fromCloud(j) {
 // Live mode: read the brain (gateway) or a USB-connected sensor straight from the serial port.
 const live = {port: null, reader: null, count: 0, since: Infinity, links: new Map()};
 const LINE = /Temperature: (-?\d+\.\d+) C \| Humidity: (\d+\.\d+) %RH \| Pressure: (\d+\.\d+) hPa/;
+/* A sensor board wired straight to USB also prints these on their own lines. */
+const LIGHT = /^Light: (\d+(?:\.\d+)?) lx/, GAS = /^TVOC: (\d+) ppb \| eCO2: (\d+) ppm/;
 /* MESS-RCOS mesh firmware: "Local|Remote origin=<MAC> session=<n> ... : sensor=bme280 status=ESP_OK C=<C> Pa=<Pa> %RH=<RH>". */
 const MESH = /origin=([0-9a-f:]{17}) session=(\d+)\b.*: sensor=bme280 status=ESP_OK C=(-?[\d.]+) Pa=([\d.]+) %RH=([\d.]+)/;
-const inRange = r => r.temperature_c >= -40 && r.temperature_c <= 85 && r.humidity_pct >= 0 &&
-  r.humidity_pct <= 100 && r.pressure_hpa >= 300 && r.pressure_hpa <= 1100;
 
 function parseLine(line) {
   let r = null, link = null;
@@ -252,7 +264,7 @@ function parseLine(line) {
   if (at >= 0) {
     try {
       const j = JSON.parse(line.slice(at + 14));
-      r = {temperature_c: j.temperature_c, humidity_pct: j.humidity_pct, pressure_hpa: j.pressure_hpa};
+      r = Object.fromEntries(Object.keys(FIELDS).map(f => [f, j[f]]));
       link = {node: String(j.node_id), boot: j.boot_id, sequence: j.sequence, rssi: j.rssi_dbm};
     } catch (e) { return null; }
   } else if (MESH.test(line)) {
@@ -261,10 +273,14 @@ function parseLine(line) {
     /* The mesh numbers all sensors' records together, so gaps don't mean lost BME280 readings: no sequence. */
     link = {node: m[1].replace(/:/g, ''), boot: m[2], rssi: rssi ? +rssi[1] : null};
   } else {
-    const m = LINE.exec(line);
-    if (m) r = {temperature_c: +m[1], humidity_pct: +m[2], pressure_hpa: +m[3]};
+    let m;
+    if ((m = LINE.exec(line))) r = {temperature_c: +m[1], humidity_pct: +m[2], pressure_hpa: +m[3]};
+    else if ((m = LIGHT.exec(line))) r = {lux: +m[1]};
+    else if ((m = GAS.exec(line))) r = {tvoc_ppb: +m[1], eco2_ppm: +m[2]};
   }
-  return r && Object.values(r).every(Number.isFinite) && inRange(r) ? {...r, link} : null;
+  if (!r) return null;
+  const values = Object.fromEntries(Object.keys(FIELDS).map(f => [f, valid(f, r[f])]));
+  return Object.values(values).some(v => v !== null) ? {...values, link} : null;
 }
 
 function addLive(r) {

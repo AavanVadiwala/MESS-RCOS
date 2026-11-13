@@ -1,3 +1,4 @@
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 #include "sdkconfig.h"
@@ -21,7 +22,7 @@ static EventGroupHandle_t network;
 static char node_id[13];
 static uint32_t boot_id;
 #define WIFI_READY BIT0
-typedef struct { uint32_t sequence; float temperature, humidity, pressure; } sample_t;
+typedef struct { uint32_t sequence; mess_reading_t r; } sample_t;
 
 static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
 {
@@ -77,12 +78,21 @@ static void sender_task(void *arg)
         if (xQueueReceive(latest, &s, pdMS_TO_TICKS(1000)) != pdTRUE) continue;
         wifi_ap_record_t ap = {0};
         int rssi = esp_wifi_sta_get_ap_info(&ap) == ESP_OK ? ap.rssi : -127;
-        char json[256];
-        snprintf(json, sizeof(json),
-            "{\"node_id\":\"%s\",\"boot_id\":\"%08lx\",\"sequence\":%lu,\"temperature_c\":%.2f,"
-            "\"humidity_pct\":%.2f,\"pressure_hpa\":%.2f,\"rssi_dbm\":%d}",
-            node_id, (unsigned long)boot_id, (unsigned long)s.sequence,
-            s.temperature, s.humidity, s.pressure, rssi);
+        char json[384];
+        int len = snprintf(json, sizeof(json), "{\"node_id\":\"%s\",\"boot_id\":\"%08lx\",\"sequence\":%lu",
+            node_id, (unsigned long)boot_id, (unsigned long)s.sequence);
+        /* Only values the sensors actually produced; a missing field means no reading. */
+        const struct { const char *key, *format; float value; } fields[] = {
+            {"temperature_c", "%.2f", s.r.temperature}, {"humidity_pct", "%.2f", s.r.humidity},
+            {"pressure_hpa", "%.2f", s.r.pressure}, {"lux", "%.1f", s.r.lux},
+            {"tvoc_ppb", "%.0f", s.r.tvoc}, {"eco2_ppm", "%.0f", s.r.eco2},
+        };
+        for (size_t i = 0; i < sizeof(fields) / sizeof(fields[0]); i++) {
+            if (!isfinite(fields[i].value)) continue;
+            len += snprintf(json + len, sizeof(json) - len, ",\"%s\":", fields[i].key);
+            len += snprintf(json + len, sizeof(json) - len, fields[i].format, fields[i].value);
+        }
+        snprintf(json + len, sizeof(json) - len, ",\"rssi_dbm\":%d}", rssi);
         esp_http_client_config_t cfg = {.url = CONFIG_MESS_BME_SERVER_URL, .timeout_ms = 2000,
                                         .disable_auto_redirect = true};
         esp_http_client_handle_t client = esp_http_client_init(&cfg);
@@ -122,10 +132,10 @@ bool mess_wifi_start(void)
     return true;
 }
 
-void mess_wifi_submit(float temperature, float humidity, float pressure)
+void mess_wifi_submit(const mess_reading_t *reading)
 {
     static uint32_t sequence;
     if (!latest) return;
-    sample_t s = {sequence++, temperature, humidity, pressure};
+    sample_t s = {sequence++, *reading};
     xQueueOverwrite(latest, &s);
 }

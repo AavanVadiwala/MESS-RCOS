@@ -1,21 +1,21 @@
-# BME280 hotspot: sensor → brain → phone → live site
+# Sensor hotspot: BME280 + BH1750 + SGP30 → brain → phone → live site
 
 A self-contained setup, separate from the mesh firmware in `firmware/`. Two classic ESP32 boards run from any USB power (charger or power bank), no computer needed:
 
 ```text
-sensor ESP32 + BME280  --Wi-Fi-->  brain ESP32 hotspot "MESS-BME280"  --Wi-Fi-->  phone at http://192.168.4.1
+sensor ESP32 + I2C   --Wi-Fi-->  brain ESP32 hotspot "MESS-BME280"  --Wi-Fi-->  phone at http://192.168.4.1
                                                                                       |
                                                                           mobile data (iPhone)
                                                                                       v
                                                                        Supabase  -->  live site
 ```
 
-- **Sensor** (`sensor/`): reads temperature, humidity and pressure once a second and POSTs each reading to the brain.
+- **Sensor** (`sensor/`): once a second reads whichever of a **BME280** (temperature, humidity, pressure), **BH1750** (light) and **SGP30** (TVOC, eCO₂) are on its I2C bus, and POSTs the values to the brain. Any of the three may be missing; the others keep working.
 - **Brain** (`brain/`): runs a WPA2 hotspot, keeps the last 1,200 readings, and serves a live graph page at http://192.168.4.1/. While an iPhone has that page open, the page also uploads readings to Supabase over the phone's mobile data.
 - **Live site** (`site/index.html`): a static page that graphs the Supabase readings from anywhere. It is currently hosted at https://orangetangy.github.io/mess-gas-sensor/; any static host works.
 - **Database** (`supabase/schema.sql`): tables and the only functions the public key may call.
 
-BME280 does not measure gas.
+eCO₂ is the SGP30's estimate from VOCs, not a direct CO₂ measurement; gas values start after the SGP30's 15-second warm-up.
 
 ## Demo
 
@@ -30,7 +30,7 @@ Android phones load the page only with mobile data off, so they show graphs but 
 
 Needs ESP-IDF 6.1 and a Supabase project. All `sdkconfig.local` and `*.local.sql` files are git-ignored: never commit them, and never share built `.bin` files, because they contain the passwords.
 
-**1. Supabase.** In the SQL Editor run `supabase/schema.sql`. Choose a long random visitor key and store only its hash by running (keep this in a git-ignored `supabase/visitor_key.local.sql`):
+**1. Supabase.** In the SQL Editor run `supabase/schema.sql`. Re-running it is safe and upgrades an older BME280-only database in place, keeping its readings; without the upgrade, light and gas values are dropped. Choose a long random visitor key and store only its hash by running (keep this in a git-ignored `supabase/visitor_key.local.sql`):
 
 ```sql
 insert into private.upload_keys (key_hash, label)
@@ -49,7 +49,7 @@ CONFIG_MESS_BME_SDA=21
 CONFIG_MESS_BME_SCL=22
 ```
 
-Set SDA and SCL to the GPIOs your BME280 is actually wired to (our test board uses 25 and 26). Wire 3V3, GND, SDA and SCL with the power off; the firmware probes I2C addresses 0x76 and 0x77.
+Wire all sensors to the same 3V3, GND, SDA and SCL with the power off, and set SDA and SCL to those GPIOs (21/22 is the ESP32 default; one of our boards uses 25/26). At start-up the sensor logs every I2C address it finds: BME280 0x76 or 0x77, BH1750 0x23 or 0x5C, SGP30 0x58. When both are fitted, the BME280's humidity is fed to the SGP30 for compensation.
 
 **3. Brain** (`brain/sdkconfig.local`):
 
@@ -71,10 +71,10 @@ idf.py -D "SDKCONFIG_DEFAULTS=sdkconfig.defaults;sdkconfig.local" build
 idf.py -p PORT flash monitor
 ```
 
-`SDKCONFIG_DEFAULTS` applies only when `sdkconfig` is first created, so delete `sdkconfig` after changing `sdkconfig.local`. The brain's monitor should show `Hotspot "MESS-BME280" on channel 6` and then `Node ... joined`; the sensor's should show `BME280 found` and `Connected, IP 192.168.4.2`. Exit the monitor with **Ctrl+]**.
+`SDKCONFIG_DEFAULTS` applies only when `sdkconfig` is first created, so delete `sdkconfig` after changing `sdkconfig.local`. The brain's monitor should show `Hotspot "MESS-BME280" on channel 6` and then `Node ... joined`; the sensor's should list its I2C devices, then `BME280 found`, `BH1750 found`, `SGP30 found` and `Connected, IP 192.168.4.2`. Exit the monitor with **Ctrl+]**.
 
 **5. Live site.** Put the same Supabase URL and publishable key in `SUPABASE` near the top of the script in `site/index.html`, then host that file. Both values are public by design: the database only lets the public key call the read and upload functions, and uploads also need the visitor or brain key.
 
 ## Status
 
-Tested on 2026-11-06 with two classic ESP32 boards (ESP-IDF 6.1): the sensor joined the hotspot within 2 seconds and the brain received about one reading a second at −42 dBm with the boards close together. The iPhone relay was tested by the team; range, battery life and Android uploads are untested.
+Tested on 2026-11-13 with two classic ESP32 boards (ESP-IDF 6.1) and a BME280 (0x77), BH1750 (0x23) and SGP30 (0x58) on GPIO21/22: the sensor joined the hotspot within 3 seconds, the brain received all six values about once a second at −36 dBm, and an iPhone on the hotspot relayed them to the live site, which graphed light, TVOC and eCO₂. The iPhone relay was tested by the team; range, battery life and Android uploads are untested.

@@ -1,6 +1,6 @@
 # MESS BME280 gateway
 
-Runs on a second ESP32 (the "brain") with no sensor wired to it. It creates a WPA2 Wi-Fi hotspot (default name `MESS-BME280`, address `192.168.4.1`) for battery-powered BME280 sensor nodes. Each reading a node POSTs to `http://192.168.4.1/readings` is printed as one `MESS_BME_JSON {...}` line on the gateway's USB serial. The live site's **Connect brain (USB)** button reads those lines in Chrome or Edge on the computer the brain is plugged into.
+Runs on a second ESP32 (the "brain") with no sensor wired to it. It creates a WPA2 Wi-Fi hotspot (default name `MESS-BME280`, address `192.168.4.1`) for battery-powered sensor nodes (BME280, BH1750 and SGP30 on one I2C bus). Each reading a node POSTs to `http://192.168.4.1/readings` is printed as one `MESS_BME_JSON {...}` line on the gateway's USB serial. The live site's **Connect brain (USB)** button reads those lines in Chrome or Edge on the computer the brain is plugged into.
 
 The laptop does not join this hotspot, so it can stay on its usual network. No sensor is wired to the gateway.
 
@@ -12,7 +12,7 @@ The brain also serves its own graph page, so both boards can run from any USB po
 2. On a phone or laptop, join the Wi-Fi network `MESS-BME280` with the hotspot password.
 3. Open **http://192.168.4.1/** (type the `http://`).
 
-The page shows live temperature, humidity and pressure graphs (1, 5 or 10 minutes) with one coloured line per sensor, plus a table of each sensor's latest values, signal strength, and readings received and missed. The brain keeps the last 1,200 readings in memory (10 minutes for two sensors), and a restart clears them. While joined, that device has no internet: the hotspot is not connected to anything. Phones may warn about this or switch back to another network; choose to stay connected. The hotspot takes eight devices in total, sensors and viewers together.
+The page shows live temperature, humidity, pressure, light, TVOC and eCO₂ graphs (1, 5 or 10 minutes) with one coloured line per sensor, plus a table of each sensor's latest values, signal strength, and readings received and missed. The brain keeps the last 1,200 readings in memory (10 minutes for two sensors), and a restart clears them. While joined, that device has no internet: the hotspot is not connected to anything. Phones may warn about this or switch back to another network; choose to stay connected. The hotspot takes eight devices in total, sensors and viewers together.
 
 ## Live website through a visitor's phone (no internet on the brain)
 

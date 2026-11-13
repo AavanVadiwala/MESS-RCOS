@@ -25,7 +25,7 @@ static const char *TAG = "GATEWAY";
 
 typedef struct {
     uint32_t received_ms, sequence;
-    float temperature, humidity, pressure;
+    float temperature, humidity, pressure, lux, tvoc, eco2; /* NAN = the sensor sent no value */
     int rssi;
     char node[13], boot[9];
 } reading_t;
@@ -65,20 +65,36 @@ static void json_id(const char *body, const char *key, char *out, size_t size)
     out[n] = '\0';
 }
 
+/* A JSON number as a float, or NAN when the field is missing (that sensor sent nothing). */
+static float json_value(const char *body, const char *key)
+{
+    double v;
+    return json_number(body, key, &v) ? (float)v : NAN;
+}
+
 /* Stores a reading for the onboard page; the USB line is sent whatever happens here. */
 static void remember(const char *body)
 {
-    double t, h, p, seq, rssi;
-    if (!json_number(body, "temperature_c", &t) || !json_number(body, "humidity_pct", &h) ||
-        !json_number(body, "pressure_hpa", &p) || !json_number(body, "sequence", &seq)) return;
+    double seq, rssi;
+    if (!json_number(body, "sequence", &seq)) return;
     if (!json_number(body, "rssi_dbm", &rssi)) rssi = -127;
-    reading_t *r = &history[(next_id - 1) % HISTORY];
-    *r = (reading_t){.received_ms = uptime_ms(), .sequence = (uint32_t)seq,
-                     .temperature = t, .humidity = h, .pressure = p, .rssi = (int)rssi};
-    json_id(body, "node_id", r->node, sizeof(r->node));
-    json_id(body, "boot_id", r->boot, sizeof(r->boot));
+    reading_t r = {.received_ms = uptime_ms(), .sequence = (uint32_t)seq, .rssi = (int)rssi,
+                   .temperature = json_value(body, "temperature_c"), .humidity = json_value(body, "humidity_pct"),
+                   .pressure = json_value(body, "pressure_hpa"), .lux = json_value(body, "lux"),
+                   .tvoc = json_value(body, "tvoc_ppb"), .eco2 = json_value(body, "eco2_ppm")};
+    if (!isfinite(r.temperature) && !isfinite(r.humidity) && !isfinite(r.pressure) &&
+        !isfinite(r.lux) && !isfinite(r.tvoc) && !isfinite(r.eco2)) return;
+    json_id(body, "node_id", r.node, sizeof(r.node));
+    json_id(body, "boot_id", r.boot, sizeof(r.boot));
+    history[(next_id - 1) % HISTORY] = r;
     next_id++;
-    uplink_add(r->node, r->boot, r->sequence, r->temperature, r->humidity, r->pressure, r->rssi);
+    uplink_add(r.node, r.boot, r.sequence, (const float[]){r.temperature, r.humidity, r.pressure, r.lux, r.tvoc, r.eco2}, r.rssi);
+}
+
+/* Appends a number with the given decimals, or null for NAN. */
+static int put_value(char *out, size_t size, float v, int decimals)
+{
+    return isfinite(v) ? snprintf(out, size, ",%.*f", decimals, v) : snprintf(out, size, ",null");
 }
 
 static esp_err_t readings_post(httpd_req_t *req)
@@ -118,7 +134,8 @@ static esp_err_t page_get(httpd_req_t *req)
 }
 
 /* GET /data?after=ID returns stored readings newer than ID as
- * {"now_ms":..,"next":..,"readings":[[id,received_ms,"node","boot",sequence,t,h,p,rssi],...]}.
+ * {"now_ms":..,"next":..,"readings":[[id,received_ms,"node","boot",sequence,t,h,p,rssi,lux,tvoc,eco2],...]},
+ * with null for any value the sensor did not send.
  * received_ms and now_ms are gateway uptime, so the page can turn them into wall-clock times. */
 static esp_err_t data_get(httpd_req_t *req)
 {
@@ -137,13 +154,21 @@ static esp_err_t data_get(httpd_req_t *req)
                        (unsigned long)uptime_ms(), (unsigned long)next_id);
     for (uint32_t id = first; id < next_id; id++) {
         const reading_t *r = &history[(id - 1) % HISTORY];
-        if (len > (int)sizeof(buf) - 120) {
+        if (len > (int)sizeof(buf) - 200) {
             if (httpd_resp_send_chunk(req, buf, len) != ESP_OK) return ESP_FAIL;
             len = 0;
         }
-        len += snprintf(buf + len, sizeof(buf) - len, "%s[%lu,%lu,\"%s\",\"%s\",%lu,%.2f,%.2f,%.2f,%d]",
+        len += snprintf(buf + len, sizeof(buf) - len, "%s[%lu,%lu,\"%s\",\"%s\",%lu",
                         id == first ? "" : ",", (unsigned long)id, (unsigned long)r->received_ms, r->node, r->boot,
-                        (unsigned long)r->sequence, r->temperature, r->humidity, r->pressure, r->rssi);
+                        (unsigned long)r->sequence);
+        len += put_value(buf + len, sizeof(buf) - len, r->temperature, 2);
+        len += put_value(buf + len, sizeof(buf) - len, r->humidity, 2);
+        len += put_value(buf + len, sizeof(buf) - len, r->pressure, 2);
+        len += snprintf(buf + len, sizeof(buf) - len, ",%d", r->rssi);
+        len += put_value(buf + len, sizeof(buf) - len, r->lux, 1);
+        len += put_value(buf + len, sizeof(buf) - len, r->tvoc, 0);
+        len += put_value(buf + len, sizeof(buf) - len, r->eco2, 0);
+        len += snprintf(buf + len, sizeof(buf) - len, "]");
     }
     len += snprintf(buf + len, sizeof(buf) - len, "]}");
     if (httpd_resp_send_chunk(req, buf, len) != ESP_OK) return ESP_FAIL;

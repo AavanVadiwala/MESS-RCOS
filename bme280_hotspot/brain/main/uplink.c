@@ -1,3 +1,4 @@
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,13 +19,13 @@
 
 static const char *TAG = "UPLINK";
 #define BUFFERED 900      /* 15 minutes at one reading a second while the uplink is down */
-#define BATCH 60          /* readings per HTTPS request; each is ~170 bytes of JSON */
+#define BATCH 60          /* readings per HTTPS request; each is up to ~260 bytes of JSON */
 #define PERIOD_MS 10000   /* upload interval */
 #define ONLINE BIT0
 
 typedef struct {
     uint32_t received_ms, sequence;
-    float temperature, humidity, pressure;
+    float values[UPLINK_VALUES];
     int8_t rssi;
     char node[13], boot[9];
 } queued_t;
@@ -74,8 +75,7 @@ bool uplink_init(void)
     return true;
 }
 
-void uplink_add(const char *node, const char *boot, uint32_t sequence,
-                float temperature, float humidity, float pressure, int rssi)
+void uplink_add(const char *node, const char *boot, uint32_t sequence, const float values[UPLINK_VALUES], int rssi)
 {
     if (!lock) return;
     xSemaphoreTake(lock, portMAX_DELAY);
@@ -85,8 +85,8 @@ void uplink_add(const char *node, const char *boot, uint32_t sequence,
         dropped++;
     }
     queued_t *q = &queue[(head + count) % BUFFERED];
-    *q = (queued_t){.received_ms = uptime_ms(), .sequence = sequence, .temperature = temperature,
-                    .humidity = humidity, .pressure = pressure, .rssi = (int8_t)rssi};
+    *q = (queued_t){.received_ms = uptime_ms(), .sequence = sequence, .rssi = (int8_t)rssi};
+    memcpy(q->values, values, sizeof(q->values));
     strlcpy(q->node, node, sizeof(q->node));
     strlcpy(q->boot, boot, sizeof(q->boot));
     count++;
@@ -100,11 +100,15 @@ static int build_batch(char *out, size_t size, size_t n)
     int len = snprintf(out, size, "{\"upload_key\":\"%s\",\"readings\":[", CONFIG_MESS_GW_UPLOAD_KEY);
     for (size_t i = 0; i < n && len > 0 && len < (int)size; i++) {
         const queued_t *q = &queue[(head + i) % BUFFERED];
+        static const struct { const char *key; int decimals; } fields[UPLINK_VALUES] = {
+            {"temperature_c", 2}, {"humidity_pct", 2}, {"pressure_hpa", 2}, {"lux", 1}, {"tvoc_ppb", 0}, {"eco2_ppm", 0}};
         len += snprintf(out + len, size - len,
-            "%s{\"node_id\":\"%s\",\"boot_id\":\"%s\",\"sequence\":%lu,\"age_ms\":%lu,"
-            "\"temperature_c\":%.2f,\"humidity_pct\":%.2f,\"pressure_hpa\":%.2f,\"rssi_dbm\":%d}",
-            i ? "," : "", q->node, q->boot, (unsigned long)q->sequence, (unsigned long)(now - q->received_ms),
-            q->temperature, q->humidity, q->pressure, q->rssi);
+            "%s{\"node_id\":\"%s\",\"boot_id\":\"%s\",\"sequence\":%lu,\"age_ms\":%lu,\"rssi_dbm\":%d",
+            i ? "," : "", q->node, q->boot, (unsigned long)q->sequence, (unsigned long)(now - q->received_ms), q->rssi);
+        for (size_t f = 0; f < UPLINK_VALUES && len > 0 && len < (int)size; f++)
+            if (isfinite(q->values[f]))
+                len += snprintf(out + len, size - len, ",\"%s\":%.*f", fields[f].key, fields[f].decimals, q->values[f]);
+        if (len > 0 && len < (int)size) len += snprintf(out + len, size - len, "}");
     }
     if (len > 0 && len < (int)size) len += snprintf(out + len, size - len, "]}");
     return len > 0 && len < (int)size ? len : -1;
@@ -132,7 +136,7 @@ static int post(const char *body, int length)
 static void upload_task(void *arg)
 {
     (void)arg;
-    const size_t size = BATCH * 200 + 128;
+    const size_t size = BATCH * 280 + 128;
     char *body = malloc(size);
     configASSERT(body);
     for (;;) {

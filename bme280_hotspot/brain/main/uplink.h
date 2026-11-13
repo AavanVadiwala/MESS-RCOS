@@ -11,6 +11,8 @@
 bool uplink_init(void);
 /* Call after esp_wifi_start when uplink_init returned true. */
 void uplink_start(void);
+/* Values per reading, in this order: temperature_c, humidity_pct, pressure_hpa, lux, tvoc_ppb, eco2_ppm.
+ * NAN means the sensor sent no value; such fields are left out of the upload. */
+#define UPLINK_VALUES 6
 /* Queues one reading for upload; the oldest are dropped when the buffer is full. */
-void uplink_add(const char *node, const char *boot, uint32_t sequence,
-                float temperature, float humidity, float pressure, int rssi);
+void uplink_add(const char *node, const char *boot, uint32_t sequence, const float values[UPLINK_VALUES], int rssi);
