@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "../../web/.env"))
 
-temp_sensor_id = 1
+temp_sensor_id = 9
 temp_loc = "Room 101"
 NUM_READINGS = 10   # rows per sensor
 INTERVAL_S = 5      # seconds between fake readings

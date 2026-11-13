@@ -8,4 +8,10 @@ export default defineConfig({
     react(),
     babel({ presets: [reactCompilerPreset()] })
   ],
+  // In `npm run dev`, forward /api calls to the Express server (server.js)
+  server: {
+    proxy: {
+      '/api': 'http://localhost:3000',
+    },
+  },
 })
