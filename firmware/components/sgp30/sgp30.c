@@ -19,6 +19,7 @@
 
 static i2c_master_bus_handle_t bus_handle;
 static i2c_master_dev_handle_t sensor_handle;
+static unsigned warmup_samples;
 
 // Every 16-bit word the SGP30 returns is followed by a CRC-8
 // (polynomial 0x31, initial value 0xFF).
@@ -110,6 +111,9 @@ esp_err_t sgp30_init(void)
     }
     if (error != ESP_OK) return error;
 
+    error = i2c_master_probe(bus_handle, SGP30_ADDRESS, 100);
+    if (error != ESP_OK) return error;
+
     i2c_device_config_t device_config = {
         .dev_addr_length = I2C_ADDR_BIT_LEN_7,
         .device_address = SGP30_ADDRESS,
@@ -150,6 +154,7 @@ esp_err_t sgp30_init(void)
     printf("The first ~15 readings are fixed at 400 ppm / 0 ppb while it warms up.\n");
 
     sensor_handle = handle;
+    warmup_samples = 15;
     return ESP_OK;
 }
 
@@ -169,7 +174,10 @@ esp_err_t sgp30_read(sensor_reading_t *reading)
         return reading->status = error;
     }
 
-    printf("eCO2: %u ppm, TVOC: %u ppb\n", values[0], values[1]);
+    if (warmup_samples > 0) {
+        --warmup_samples;
+        return reading->status = ESP_ERR_NOT_FINISHED;
+    }
 
     *reading = (sensor_reading_t){
         .status = ESP_OK,

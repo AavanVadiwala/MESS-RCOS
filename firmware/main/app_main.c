@@ -39,9 +39,7 @@ static void acquire(void *argument)
             sensor_reading_t reading = {0};
             uint64_t measured_us = (uint64_t)esp_timer_get_time();
             esp_err_t status = sensor->initialization;
-            /* Stub drivers report their field-test name even without hardware. */
-            if (status == ESP_OK || status == ESP_ERR_NOT_SUPPORTED)
-                status = sensor->read(&reading);
+            if (status == ESP_OK) status = sensor->read(&reading);
             if (status == ESP_OK) status = reading.status;
             if (status == ESP_OK && reading.count != sensor->expected_count)
                 status = ESP_ERR_INVALID_SIZE;
@@ -54,9 +52,12 @@ static void acquire(void *argument)
                         sensor->units[j], (double)reading.values[j]);
                     used = written < 0 ? written : used + written;
                 }
-            } else if (status == ESP_ERR_NOT_SUPPORTED && reading.field_test_name) {
-                used = snprintf(text, sizeof(text), "sensor=%s status=placeholder value=%s",
-                    sensor->name, reading.field_test_name);
+            } else if (sensor->initialization == ESP_ERR_NOT_FOUND) {
+                used = snprintf(text, sizeof(text),
+                    "sensor=%s status=sensor_not_installed value=null", sensor->name);
+            } else if (status == ESP_ERR_NOT_FINISHED) {
+                used = snprintf(text, sizeof(text),
+                    "sensor=%s status=warming_up value=null", sensor->name);
             } else {
                 used = snprintf(text, sizeof(text), "sensor=%s status=%s value=null",
                     sensor->name, esp_err_to_name(status));

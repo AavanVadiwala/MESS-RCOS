@@ -108,6 +108,7 @@ static esp_err_t load_calibration(void)
 
 static esp_err_t find_device(i2c_master_bus_handle_t bus)
 {
+    bool wrong_chip = false;
     /* SDO to GND selects 0x76, to VDDIO selects 0x77. */
     for (uint16_t address = 0x76; address <= 0x77; ++address) {
         esp_err_t error = i2c_master_probe(bus, address, TIMEOUT_MS);
@@ -126,6 +127,7 @@ static esp_err_t find_device(i2c_master_bus_handle_t bus)
         error = read_regs(REG_CHIP_ID, &id, 1);
         if (error == ESP_OK && id == CHIP_ID) return ESP_OK;
         if (error == ESP_OK) {
+            wrong_chip = true;
             ESP_LOGW(TAG, "I2C address 0x%02x returned chip ID 0x%02x (expected 0x60)", address, id);
         }
         i2c_master_bus_rm_device(device);
@@ -134,7 +136,7 @@ static esp_err_t find_device(i2c_master_bus_handle_t bus)
     }
     ESP_LOGE(TAG, "No BME280 at 0x76 or 0x77 on I2C port %d (SDA GPIO %d, SCL GPIO %d)",
         CONFIG_MESS_I2C_PORT, CONFIG_MESS_I2C_SDA, CONFIG_MESS_I2C_SCL);
-    return ESP_ERR_NOT_FOUND;
+    return wrong_chip ? ESP_ERR_INVALID_RESPONSE : ESP_ERR_NOT_FOUND;
 }
 
 esp_err_t bme280_init(void)

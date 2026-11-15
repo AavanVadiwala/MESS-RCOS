@@ -1,7 +1,7 @@
 # MESS
 
 ESP32 firmware that discovers nearby compatible boards and shares the latest
-sensor readings through a mesh using ESP-NOW Long Range at 500 Kbps.
+sensor readings through an ESP-WIFI-MESH network configured for Long Range.
 
 ## Folder structure
 
@@ -36,28 +36,27 @@ Hidden Git files remain for version control. There is no records or tests folder
 | `components/bh1750` | Reads illuminance in lux over I2C0 on GPIO 21/22 and publishes the live value once per second. |
 | `components/sensor_types` | Common result containing status, numeric values, and an optional field-test name. |
 | `components/mess_mesh` | Keeps the newest reading per original MAC and sensor, rejects duplicates and older readings, and limits forwarding. |
-| `components/mess_broadcast` | Sets up ESP-NOW, discovers neighbors, receives and prints readings, and broadcasts eligible readings. |
-| `components/mess_hotspot` | Creates each board's laptop hotspot and hosts a live table of its accepted local and relayed readings. |
+| `components/mess_broadcast` | Starts the Wi-Fi mesh and forwards node readings to the collector, which prints them over serial. |
 | `build_and_flash.ps1` | Builds, flashes, and monitors firmware using `firmware/builds`. |
 
 Paths for components and main are inside `firmware/`.
 
-Each board forwards a new reading once, preserving its original MAC and
-measurement time. Random delays, an eight-relay-hop limit and an accumulated-age
-limit prevent endless forwarding. Measurement times are the original board's
-uptime. Remote output distinguishes the original MCU from the immediate relay.
+Each node polls its own I2C sensors once per second and sends one record per
+sensor to the collector. The collector also polls its local sensors and prints
+local and remote records over serial, identified by their source MAC and sensor.
+
 
 ## Field testing and remaining work
 
 The BME280, SGP30, and BH1750 drivers now publish real sensor values; the
-SGP30's first ~15 readings are fixed at 400 ppm CO2-equivalent / 0 ppb TVOC
+SGP30's first 15 successful samples are reported as `status=warming_up value=null`
 while it warms up.
 
 | Sensor | Status and remaining work |
 |---|---|
 | BME280 | Reads temperature (C), pressure (Pa), and humidity (%RH) over I2C0 on SDA GPIO 21 / SCL GPIO 22. Supports addresses `0x76` and `0x77`; verify wiring on the target hardware. |
 | SGP30 | Initializes the I2C bus, confirms the sensor's serial and feature set, starts the air-quality algorithm, and reads CO2-equivalent (ppm) and TVOC (ppb) once per second. Baseline and humidity compensation handling remain to be tuned on the target platform. |
-| BH1750 | Reads single-shot high-resolution illuminance in lux using the shared I2C0 bus. The sensor is addressed at `0x23` and uses a 180 ms conversion delay before reading its 16-bit result. |
+| BH1750 | Reads single-shot high-resolution illuminance in lux using the shared I2C0 bus. The sensor supports addresses `0x23` and `0x5C` and uses a 180 ms conversion delay before reading its 16-bit result. |
 
 The sensors share I2C port 0 by default, with SDI (SDA) on GPIO 21 and SCK (SCL)
 on GPIO 22. To change the bus settings, open **MESS I2C** in `idf.py menuconfig`.
@@ -68,28 +67,21 @@ then build and flash. The serial monitor at 115200 baud prints the configured
 GPIOs and responding addresses. Reset the board to repeat the scan. Disable the
 setting and rebuild to resume measurements.
 
-The mesh is implemented with best-effort delivery; acknowledgements and retries
-are not implemented. Physical radio operation still needs testing. To check
-relaying, arrange A–B–C so A and C cannot communicate directly, then confirm C
-receives A's readings through B.
+If a sensor gives no I2C response at startup, its record contains
+`status=sensor_not_installed value=null`. A wrong chip ID or another I2C
+failure carries the ESP-IDF error name. Other installed sensors continue to
+produce their own records.
 
-## Open the readings table
+## Separate hotspot collection on the firmware branch
 
-Connect your laptop to the board's `MESS-<MAC>` Wi-Fi network.
-Every board uses the password **MESS12345**. Open **http://192.168.4.1/**.
-The website runs on the ESP32; `localhost` on your laptop would address the laptop.
-No internet or router is required.
+The [sensor hotspot project](https://github.com/AavanVadiwala/MESS-RCOS/tree/firmware/bme280_hotspot)
+uses two ESP32 builds. Flash `bme280_hotspot/sensor` on the board wired to the
+sensors and `bme280_hotspot/brain` on the gateway. The sensor probes and reads
+each installed device separately, then sends the available values together in
+an HTTP POST to the gateway. The gateway serves live graphs to devices on its
+Wi-Fi hotspot. That project also uses BME280 humidity to compensate SGP30 gas
+readings when both sensors are present.
 
-The table refreshes every second and shows the newest 256 accepted readings.
-Each UUID is the original MAC address combined with the original measurement
-time in microseconds. Sensor and boot session are shown separately because
-identical timestamps or restarts can repeat that UUID. Duplicate mesh copies are
-not added again. History is kept in RAM, older rows are replaced when full, and
-a restart clears the table.
-
-The hotspot uses normal Wi-Fi while the station interface continues ESP-NOW
-Long Range at 500 Kbps. Both use channel 1. Check simultaneous laptop access
-and mesh reception on real boards after flashing.
 
 ## Build, flash and monitor
 
