@@ -1,0 +1,18 @@
+[Unit]
+Description=MESS ESP32 USB collector
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+DynamicUser=yes
+SupplementaryGroups=dialout
+StateDirectory=mess
+StateDirectoryMode=0750
+ExecStartPre=/usr/bin/sleep 5
+ExecStart=/usr/bin/python3 -u /usr/local/lib/mess/collector.py --auto --quiet --database /var/lib/mess/readings.sqlite3
+KillSignal=SIGINT
+Restart=on-failure
+RestartSec=10s
+
+[Install]
+WantedBy=multi-user.target

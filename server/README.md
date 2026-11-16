@@ -1,8 +1,10 @@
 # MESS server setup
 
 The server connects to the collector ESP32 over USB, archives its readings locally,
-and sends measurements to the API in [software](../software/). The Windows setup
-is available now. Ubuntu setup is pending.
+and sends measurements to the API in [software](../software/).
+
+For a Raspberry Pi running Raspberry Pi OS or Ubuntu, see the
+[headless boot setup](raspberry%20pi/README.md).
 
 ## Windows
 

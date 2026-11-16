@@ -50,9 +50,11 @@ def open_port(port):
     return connection
 
 
-def detect_boards(manual_reset):
+def detect_boards(manual_reset, usb_only=False):
     boards = []
     for port in sorted(list_ports.comports()):
+        if usb_only and port.vid is None:
+            continue
         print(f"Checking {port.device} ({port.description})", flush=True)
         try:
             with open_port(port.device) as connection:
@@ -173,11 +175,12 @@ def upload_pending(path, endpoint, stop):
         database.close()
 
 
-def collect(connection, path, endpoint):
+def collect(connection, path, endpoint, quiet=False):
     path.parent.mkdir(parents=True, exist_ok=True)
     database = sqlite3.connect(path)
     database.executescript("""
         PRAGMA journal_mode = WAL;
+        PRAGMA synchronous = FULL;
         CREATE TABLE IF NOT EXISTS boards (id INTEGER PRIMARY KEY, mac TEXT NOT NULL UNIQUE);
         CREATE TABLE IF NOT EXISTS records (
             id INTEGER PRIMARY KEY, received TEXT NOT NULL, raw TEXT NOT NULL,
@@ -189,9 +192,11 @@ def collect(connection, path, endpoint):
     stop = Event()
     uploader = Thread(target=upload_pending, args=(path, endpoint, stop))
     uploader.start()
-    print(f"Reading only {connection.port}. Saving to {path}. Press Ctrl+C to stop.")
+    print(f"Reading only {connection.port}. Saving to {path}.")
     try:
         while True:
+            if not uploader.is_alive():
+                raise RuntimeError("API uploader stopped unexpectedly")
             line = connection.readline()
             if not line.startswith(PREFIX):
                 continue
@@ -208,7 +213,8 @@ def collect(connection, path, endpoint):
                 continue
             record["mac"] = mac.lower()
             save_record(database, record)
-            print(f"{record['mac']}  {record['reading']}", flush=True)
+            if not quiet:
+                print(f"{record['mac']}  {record['reading']}", flush=True)
     finally:
         stop.set()
         uploader.join()
@@ -221,27 +227,35 @@ def main():
                         help="Resume collection from a previously configured collector")
     parser.add_argument("--manual-reset", action="store_true",
                         help="Allow a manual reset during discovery if automatic reset fails")
+    parser.add_argument("--auto", action="store_true",
+                        help="Discover USB MESS boards and select the first port automatically")
+    parser.add_argument("--quiet", action="store_true",
+                        help="Save each reading without printing it")
     parser.add_argument("--endpoint", default="http://127.0.0.1:3000/data")
     parser.add_argument("--database", type=Path,
                         default=Path(__file__).resolve().parents[1] / "data" / "readings.sqlite3")
     args = parser.parse_args()
+    if args.auto and (args.collector or args.manual_reset):
+        parser.error("--auto cannot be used with --collector or --manual-reset")
     try:
         if args.collector:
             with open_port(args.collector) as connection:
-                collect(connection, args.database, args.endpoint)
+                collect(connection, args.database, args.endpoint, args.quiet)
             return 0
 
-        boards = detect_boards(args.manual_reset)
+        boards = detect_boards(args.manual_reset, usb_only=args.auto)
         if not boards:
+            if args.auto:
+                raise RuntimeError("No USB ESP32s answered with the MESS role prompt.")
             raise RuntimeError("No MESS ESP32s detected. Close serial monitors and try --manual-reset.")
-        collector = choose_collector(boards)
+        collector = boards[0] if args.auto else choose_collector(boards)
         for port in boards:
             if port != collector:
                 with open_port(port) as connection:
                     configure_role(connection, "node")
         with open_port(collector) as connection:
             configure_role(connection, "collector")
-            collect(connection, args.database, args.endpoint)
+            collect(connection, args.database, args.endpoint, args.quiet)
     except KeyboardInterrupt:
         return 0
     except (OSError, RuntimeError, SerialException, sqlite3.Error) as error:
