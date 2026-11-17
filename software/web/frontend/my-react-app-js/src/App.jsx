@@ -30,13 +30,21 @@ const SENSORS = {
 function App() {
   const [web_state, setState] = useState("info");
   const [render_limit, setlimit] = useState(10);
+  const [interval, setInterval] = useState(2000);
   const sensor = SENSORS[web_state];
 
-  const handleSumbit = (e) => {
+  const handleLimit = (e) => {
     e.preventDefault();
     const form = e.target;
     const formData = new FormData(form);
     setlimit(formData.get("query"));
+  };
+
+  const handleTime = (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const formData = new FormData(form);
+    setInterval(formData.get("query"));
   };
 
   return (
@@ -68,10 +76,17 @@ function App() {
 
       {sensor && (
         <>
-          <form onSubmit={handleSumbit}>
-            <input name="query"></input>
-            <button type="submit">Set Limit</button>
-          </form>
+          <div style={{display: "flex", justifyContent: "space-evenly",}}>
+            <form onSubmit={handleLimit}>
+              <input name="query"></input>
+              <button type="submit">Set Limit</button>
+            </form>
+
+            <form onSubmit={handleTime}>
+              <input name="query"></input>
+              <button type="submit">Set Time</button>
+            </form>
+          </div>
 
           <h2>{sensor.title}</h2>
           <SensorTable
@@ -79,6 +94,7 @@ function App() {
             type={sensor.type}
             columns={sensor.columns}
             limit={render_limit}
+            intervalMs={interval}
           />
         </>
       )}

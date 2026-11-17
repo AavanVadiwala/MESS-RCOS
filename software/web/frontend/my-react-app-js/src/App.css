@@ -182,3 +182,35 @@
     border-right-color: var(--border);
   }
 }
+
+/* Sortable headers */
+th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+th.sortable:hover {
+  color: var(--text);
+}
+th.sorted {
+  color: var(--accent);
+}
+th .arrow {
+  margin-left: 6px;
+  font-size: 0.7rem;
+  opacity: 0.5;
+}
+th.sorted .arrow {
+  opacity: 1;
+}
+
+/* Center the table */
+.table-wrap {
+  width: fit-content;   /* box hugs the table instead of filling the row */
+  max-width: 100%;      /* never wider than the card */
+  margin: 0 auto;       /* center the box */
+  overflow-x: auto;     /* scroll sideways if the table is too wide */
+}
+
+table {
+  width: auto;
+}
