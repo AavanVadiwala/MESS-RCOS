@@ -1,5 +1,5 @@
 # installing packages
-# install.packages(c("shiny","tidyverse", "jsonlite")) 
+# install.packages(c("shiny", "ggplot2", "jsonlite"))
 
 #troubleshooting:
 # getwd()
@@ -7,13 +7,11 @@
 
 #libraries
 library(shiny)
-library(tidyverse)
+library(ggplot2)
 library(jsonlite)
 
 # known conflicts in packages:
 # (requires package specification for certain methods)
-# dplyr::filter() masks stats::filter()
-# dplyr::lag()    masks stats::lag()
 # jsonlite::validate() masks shiny::validate()
 
 # ------ helper functions ------------

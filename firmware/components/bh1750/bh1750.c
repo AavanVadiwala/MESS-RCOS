@@ -4,10 +4,9 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#define BH1750_I2C_PORT I2C_NUM_0
-#define BH1750_SDA_PIN GPIO_NUM_21
-#define BH1750_SCL_PIN GPIO_NUM_22
-#define BH1750_I2C_ADDRESS 0x23
+#include "sdkconfig.h"
+#define BH1750_I2C_ADDRESS_LOW 0x23
+#define BH1750_I2C_ADDRESS_HIGH 0x5C
 #define BH1750_MEASUREMENT_MODE 0x20
 #define BH1750_CONVERSION_TIME_MS 180
 
@@ -18,12 +17,12 @@ esp_err_t bh1750_init(void)
 {
     if (sensor_handle) return ESP_OK;
 
-    esp_err_t error = i2c_master_get_bus_handle(BH1750_I2C_PORT, &bus_handle);
+    esp_err_t error = i2c_master_get_bus_handle(CONFIG_MESS_I2C_PORT, &bus_handle);
     if (error == ESP_ERR_INVALID_STATE) {
         i2c_master_bus_config_t bus_config = {
-            .i2c_port = BH1750_I2C_PORT,
-            .sda_io_num = BH1750_SDA_PIN,
-            .scl_io_num = BH1750_SCL_PIN,
+            .i2c_port = CONFIG_MESS_I2C_PORT,
+            .sda_io_num = CONFIG_MESS_I2C_SDA,
+            .scl_io_num = CONFIG_MESS_I2C_SCL,
             .clk_source = I2C_CLK_SRC_DEFAULT,
             .glitch_ignore_cnt = 7,
             .flags.enable_internal_pullup = true,
@@ -32,9 +31,17 @@ esp_err_t bh1750_init(void)
     }
     if (error != ESP_OK) return error;
 
+    uint16_t address = BH1750_I2C_ADDRESS_LOW;
+    error = i2c_master_probe(bus_handle, address, 100);
+    if (error == ESP_ERR_NOT_FOUND) {
+        address = BH1750_I2C_ADDRESS_HIGH;
+        error = i2c_master_probe(bus_handle, address, 100);
+    }
+    if (error != ESP_OK) return error;
+
     i2c_device_config_t device_config = {
         .dev_addr_length = I2C_ADDR_BIT_LEN_7,
-        .device_address = BH1750_I2C_ADDRESS,
+        .device_address = address,
         .scl_speed_hz = 100000,
     };
     error = i2c_master_bus_add_device(bus_handle, &device_config, &sensor_handle);
@@ -52,7 +59,7 @@ esp_err_t bh1750_read(sensor_reading_t *reading)
     esp_err_t error = i2c_master_transmit(sensor_handle, &command, sizeof(command), 1000);
     if (error != ESP_OK) return reading->status = error;
 
-    vTaskDelay(pdMS_TO_TICKS(BH1750_CONVERSION_TIME_MS));
+    vTaskDelay(pdMS_TO_TICKS(BH1750_CONVERSION_TIME_MS) + 1);
 
     uint8_t data[2];
     error = i2c_master_receive(sensor_handle, data, sizeof(data), 1000);

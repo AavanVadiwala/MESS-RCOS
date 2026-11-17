@@ -1,6 +1,7 @@
 services:
   db:
     image: postgres:16-alpine
+    restart: unless-stopped
     env_file: ./web/.env
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -16,6 +17,7 @@ services:
 
   web:
     build: ./web
+    restart: unless-stopped
     env_file: ./web/.env
     environment:
       DB_HOST: db
@@ -27,6 +29,7 @@ services:
 
   shiny:
     build: ./web/R
+    restart: unless-stopped
     ports:
       - "3838:3838"
     volumes:

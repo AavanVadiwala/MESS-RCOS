@@ -7,9 +7,7 @@
 #include "driver/i2c_master.h"
 #include "esp_err.h"
 
-#define I2C_PORT I2C_NUM_0
-#define SDA_PIN GPIO_NUM_21
-#define SCL_PIN GPIO_NUM_22
+#include "sdkconfig.h"
 
 #define SGP30_ADDRESS 0x58
 
@@ -21,6 +19,7 @@
 
 static i2c_master_bus_handle_t bus_handle;
 static i2c_master_dev_handle_t sensor_handle;
+static unsigned warmup_samples;
 
 // Every 16-bit word the SGP30 returns is followed by a CRC-8
 // (polynomial 0x31, initial value 0xFF).
@@ -97,19 +96,22 @@ esp_err_t sgp30_init(void)
 
     // The bus is shared with the other I2C sensors; create it only if
     // nobody has yet.
-    esp_err_t error = i2c_master_get_bus_handle(I2C_PORT, &bus_handle);
+    esp_err_t error = i2c_master_get_bus_handle(CONFIG_MESS_I2C_PORT, &bus_handle);
     if (error == ESP_ERR_INVALID_STATE)
     {
         i2c_master_bus_config_t bus_config = {
-            .i2c_port = I2C_PORT,
-            .sda_io_num = SDA_PIN,
-            .scl_io_num = SCL_PIN,
+            .i2c_port = CONFIG_MESS_I2C_PORT,
+            .sda_io_num = CONFIG_MESS_I2C_SDA,
+            .scl_io_num = CONFIG_MESS_I2C_SCL,
             .clk_source = I2C_CLK_SRC_DEFAULT,
             .glitch_ignore_cnt = 7,
             .flags.enable_internal_pullup = true
         };
         error = i2c_new_master_bus(&bus_config, &bus_handle);
     }
+    if (error != ESP_OK) return error;
+
+    error = i2c_master_probe(bus_handle, SGP30_ADDRESS, 100);
     if (error != ESP_OK) return error;
 
     i2c_device_config_t device_config = {
@@ -152,6 +154,7 @@ esp_err_t sgp30_init(void)
     printf("The first ~15 readings are fixed at 400 ppm / 0 ppb while it warms up.\n");
 
     sensor_handle = handle;
+    warmup_samples = 15;
     return ESP_OK;
 }
 
@@ -171,7 +174,10 @@ esp_err_t sgp30_read(sensor_reading_t *reading)
         return reading->status = error;
     }
 
-    printf("eCO2: %u ppm, TVOC: %u ppb\n", values[0], values[1]);
+    if (warmup_samples > 0) {
+        --warmup_samples;
+        return reading->status = ESP_ERR_NOT_FINISHED;
+    }
 
     *reading = (sensor_reading_t){
         .status = ESP_OK,
