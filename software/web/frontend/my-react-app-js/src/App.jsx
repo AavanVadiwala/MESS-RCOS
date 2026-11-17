@@ -27,6 +27,9 @@ const SENSORS = {
   },
 };
 
+// Shiny container is published on 3838 (see software/docker-compose.yml)
+const SHINY_URL = `${window.location.protocol}//${window.location.hostname}:3838/`;
+
 function App() {
   const [web_state, setState] = useState("info");
   const sensor = SENSORS[web_state];
@@ -39,6 +42,7 @@ function App() {
         <button onClick={() => setState("sgp")}>SGP30</button>
         <button onClick={() => setState("bh")}>BH1750</button>
         <button onClick={() => setState("info")}>Info</button>
+        <button onClick={() => setState("analysis")}>Analysis</button>
       </div>
 
       {web_state === "info" && (
@@ -55,6 +59,16 @@ function App() {
           <p>Multi-pixel gas sensor</p>
           <h3>BH1750</h3>
           <p>Ambient light sensor</p>
+        </>
+      )}
+
+      {web_state === "analysis" && (
+        <>
+          <iframe
+            title="Analysis"
+            src={SHINY_URL}
+            style={{ width: "100%", height: "85vh", border: "none" }}
+          />
         </>
       )}
 
