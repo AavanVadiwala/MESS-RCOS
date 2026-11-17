@@ -72,7 +72,13 @@ function App() {
             <input name="query"></input>
             <button type="submit">Set Limit</button>
           </form>
-
+          <iframe
+            src = "http://127.0.0.1:3589"
+            title="Live Data"
+            width="100%"
+            lengh = "200%"
+          
+          />
           <h2>{sensor.title}</h2>
           <SensorTable
             key={sensor.type}
