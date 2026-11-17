@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import './App.css';
-import SensorTable from './components/SensorTable';
+import { useState } from "react";
+import "./App.css";
+import SensorTable from "./components/SensorTable";
 
 const SENSORS = {
   bme: {
@@ -32,7 +32,15 @@ const SHINY_URL = `${window.location.protocol}//${window.location.hostname}:3838
 
 function App() {
   const [web_state, setState] = useState("info");
+  const [render_limit, setlimit] = useState(10);
   const sensor = SENSORS[web_state];
+
+  const handleSumbit = (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const formData = new FormData(form);
+    setlimit(formData.get("query"));
+  };
 
   return (
     <>
@@ -74,12 +82,17 @@ function App() {
 
       {sensor && (
         <>
+          <form onSubmit={handleSumbit}>
+            <input name="query"></input>
+            <button type="submit">Set Limit</button>
+          </form>
+
           <h2>{sensor.title}</h2>
           <SensorTable
             key={sensor.type}
             type={sensor.type}
             columns={sensor.columns}
-            limit={20}
+            limit={render_limit}
           />
         </>
       )}

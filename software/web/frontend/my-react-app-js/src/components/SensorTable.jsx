@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 // Polls GET /api/:type (see software/web/server.js) and renders the rows.
 // columns: [{ key: "temperature", label: "Temperature (C)" }, ...]
-function SensorTable({ type, columns, limit = 10, intervalMs = 2000 }) {
+function SensorTable({ type, columns, limit, intervalMs = 2000 }) {
   const [rows, setRows] = useState([]);
   const [error, setError] = useState(null);
 
