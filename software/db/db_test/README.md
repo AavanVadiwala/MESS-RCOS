@@ -1,61 +1,90 @@
 # Database Input Scripts
 
-These scripts test inserting data values into the PostgreSQL database. Run them from this directory after starting the database.
+These scripts insert test readings into the PostgreSQL database and print the
+latest rows back, so you can check that the schema and connection work without
+real hardware.
 
 ## Requirements
 
-- Python 3
-- PostgreSQL running on port `5432`
+- Python 3.10+ (the scripts use `match` statements)
 - Python packages: `psycopg` and `python-dotenv`
-- Database settings in `software/web/.env`
 
-The scripts use sensor ID `1` and location `Room 101` as default. They expect the
-following data types and corresponding database tables:
+  ```powershell
+  pip install "psycopg[binary]" python-dotenv
+  ```
 
-| Data type | Table | Value column |
-| --- | --- | --- |
-| `light` | `light_data` | `light_value` |
-| `gas` | `gas_data` | `gas_value` |
-| `temp` | `temp_data` | `temp_value` |
-| `humid` | `humid_data` | `humid_value` |
-
-## `manual_input.py`
-
-Use this script to enter one reading at a time.
-
-1. Select `live` from the main menu.
-2. Enter a data type: `light`, `gas`, `temp`, or `humid`.
-3. Enter a numeric value. Decimal values are accepted.
-4. The reading is inserted into the matching table.
-
-The `output` menu option displays the 10 most recent readings for a selected
-data type. Choose `exit` to stop the script.
-
-```powershell
-python manual_input.py
-```
-
-## `random_input.py`
-
-Use this script to generate test data automatically. It creates a list of 10
-random floating-point values between `10` and `100` for each of the four data
-types:
-
-- Light
-- Gas
-- Temperature
-- Humidity
-
-All 40 generated readings are inserted into the database. After insertion,
-the script prints the 10 most recent readings for each data type in the
-terminal.
-
-```powershell
-python random_input.py
-```
+- PostgreSQL running on `localhost:5432`
+- Database settings in `software/web/.env` (copy `software/web/.env.example`
+  if you don't have one). The scripts read `POSTGRES_DB`, `POSTGRES_USER`,
+  `POSTGRES_PASSWORD` and, optionally, `DB_HOST`.
 
 Start the database from `software` if it is not already running:
 
 ```powershell
 docker compose up -d db
 ```
+
+> `db/schema.sql` only runs when the database volume is first created. If you
+> still have the old tables from an earlier schema, reset the volume with
+> `docker compose down -v` and start the database again. This deletes all
+> stored data.
+
+## Tables
+
+Each physical sensor has its own table (see [`../schema.sql`](../schema.sql)).
+Every row also stores `recorded_at`, `sensor_id` and `loc`.
+
+| Sensor | Table | Value columns |
+| --- | --- | --- |
+| `bme280` | `bme280_data` | `temperature` (°C), `humidity` (%RH), `pressure` (hPa) |
+| `sgp30` | `sgp30_data` | `eco2` (ppm), `tvoc` (ppb), both integers |
+| `bh1750` | `bh1750_data` | `lux` (lx) |
+
+Both scripts use sensor ID `9` and location `Room 101` for every row. To change
+them, edit `temp_sensor_id` and `temp_loc` at the top of each script.
+
+## `manual_input.py`
+
+Use this script to enter one reading at a time.
+
+```powershell
+python manual_input.py
+```
+
+From the main menu:
+
+- **`live`**: enter a sensor type (`bme280`, `sgp30` or `bh1750`), then its
+  values separated by spaces, in this order:
+
+  | Sensor | Example input |
+  | --- | --- |
+  | `bme280` | `22.5 45 1013.2` (temperature, humidity, pressure) |
+  | `sgp30` | `450 20` (eco2, tvoc) |
+  | `bh1750` | `320` (lux) |
+
+  After each reading, press Enter to add another, or type `back` to return to
+  the main menu.
+- **`output`**: enter a sensor type to show its 10 most recent readings.
+- **`exit`**: quit. Ctrl+C also stops the script.
+
+## `random_input.py`
+
+Use this script to fill the database with test data automatically.
+
+```powershell
+python random_input.py
+```
+
+For each sensor it inserts 10 rows (`NUM_READINGS`) of random values within
+realistic ranges. The rows are timestamped 5 seconds apart (`INTERVAL_S`),
+with the newest row at the current time. It then prints the 10 most recent
+readings for each sensor.
+
+| Sensor | Value ranges |
+| --- | --- |
+| `bme280` | temperature 20–25, humidity 40–50, pressure 1010–1015 |
+| `sgp30` | eco2 400–600, tvoc 0–60 |
+| `bh1750` | lux 300–350 |
+
+To change the ranges, edit the `SENSORS` dictionary. Its column names must
+match `db/schema.sql`.
