@@ -27,16 +27,27 @@ const SENSORS = {
   },
 };
 
+// Shiny container is published on 3838 (see software/docker-compose.yml)
+const SHINY_URL = `${window.location.protocol}//${window.location.hostname}:3838/`;
+
 function App() {
   const [web_state, setState] = useState("info");
   const [render_limit, setlimit] = useState(10);
+  const [interval, setInterval] = useState(2000);
   const sensor = SENSORS[web_state];
 
-  const handleSumbit = (e) => {
+  const handleLimit = (e) => {
     e.preventDefault();
     const form = e.target;
     const formData = new FormData(form);
     setlimit(formData.get("query"));
+  };
+
+  const handleTime = (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const formData = new FormData(form);
+    setInterval(formData.get("query"));
   };
 
   return (
@@ -47,6 +58,7 @@ function App() {
         <button onClick={() => setState("sgp")}>SGP30</button>
         <button onClick={() => setState("bh")}>BH1750</button>
         <button onClick={() => setState("info")}>Info</button>
+        <button onClick={() => setState("analysis")}>Analysis</button>
       </div>
 
       {web_state === "info" && (
@@ -66,25 +78,37 @@ function App() {
         </>
       )}
 
+      {web_state === "analysis" && (
+        <>
+          <iframe
+            title="Analysis"
+            src={SHINY_URL}
+            style={{ width: "100%", height: "85vh", border: "none" }}
+          />
+        </>
+      )}
+
       {sensor && (
         <>
-          <form onSubmit={handleSumbit}>
-            <input name="query"></input>
-            <button type="submit">Set Limit</button>
-          </form>
-          <iframe
-            src = "http://127.0.0.1:3589"
-            title="Live Data"
-            width="100%"
-            lengh = "200%"
-          
-          />
+          <div style={{display: "flex", justifyContent: "space-evenly",}}>
+            <form onSubmit={handleLimit}>
+              <input name="query"></input>
+              <button type="submit">Set Limit</button>
+            </form>
+
+            <form onSubmit={handleTime}>
+              <input name="query"></input>
+              <button type="submit">Set Time</button>
+            </form>
+          </div>
+
           <h2>{sensor.title}</h2>
           <SensorTable
             key={sensor.type}
             type={sensor.type}
             columns={sensor.columns}
             limit={render_limit}
+            intervalMs={interval}
           />
         </>
       )}
