@@ -7,64 +7,94 @@
     },
     "readings": [
       {
-        "time": "2026-10-27T12:00:00.000Z",
+        "id": 1,
+        "recorded_at": "2026-10-27T12:00:00.000Z",
         "temperature": 22.63,
         "humidity": 44.89,
-        "pressure": 1012.95
+        "pressure": 1012.95,
+        "sensor_id": 1,
+        "loc": "lab"
       },
       {
-        "time": "2026-10-27T12:00:05.000Z",
+        "id": 2,
+        "recorded_at": "2026-10-27T12:00:05.000Z",
         "temperature": 22.92,
         "humidity": 45.52,
-        "pressure": 1013.54
+        "pressure": 1013.54,
+        "sensor_id": 1,
+        "loc": "lab"
       },
       {
-        "time": "2026-10-27T12:00:10.000Z",
+        "id": 3,
+        "recorded_at": "2026-10-27T12:00:10.000Z",
         "temperature": 22.86,
         "humidity": 45.51,
-        "pressure": 1013.41
+        "pressure": 1013.41,
+        "sensor_id": 1,
+        "loc": "lab"
       },
       {
-        "time": "2026-10-27T12:00:15.000Z",
+        "id": 4,
+        "recorded_at": "2026-10-27T12:00:15.000Z",
         "temperature": 22.62,
         "humidity": 44.96,
-        "pressure": 1013.01
+        "pressure": 1013.01,
+        "sensor_id": 1,
+        "loc": "lab"
       },
       {
-        "time": "2026-10-27T12:00:20.000Z",
+        "id": 5,
+        "recorded_at": "2026-10-27T12:00:20.000Z",
         "temperature": 22.18,
         "humidity": 44.66,
-        "pressure": 1012.7
+        "pressure": 1012.7,
+        "sensor_id": 1,
+        "loc": "lab"
       },
       {
-        "time": "2026-10-27T12:00:25.000Z",
+        "id": 6,
+        "recorded_at": "2026-10-27T12:00:25.000Z",
         "temperature": 22.08,
         "humidity": 44.44,
-        "pressure": 1012.45
+        "pressure": 1012.45,
+        "sensor_id": 1,
+        "loc": "lab"
       },
       {
-        "time": "2026-10-27T12:00:30.000Z",
+        "id": 7,
+        "recorded_at": "2026-10-27T12:00:30.000Z",
         "temperature": 22.32,
         "humidity": 44.92,
-        "pressure": 1012.74
+        "pressure": 1012.74,
+        "sensor_id": 1,
+        "loc": "lab"
       },
       {
-        "time": "2026-10-27T12:00:35.000Z",
+        "id": 8,
+        "recorded_at": "2026-10-27T12:00:35.000Z",
         "temperature": 22.79,
         "humidity": 45.31,
-        "pressure": 1013.36
+        "pressure": 1013.36,
+        "sensor_id": 1,
+        "loc": "lab"
       },
       {
-        "time": "2026-10-27T12:00:40.000Z",
+        "id": 9,
+        "recorded_at": "2026-10-27T12:00:40.000Z",
         "temperature": 22.95,
         "humidity": 45.63,
-        "pressure": 1013.5
+        "pressure": 1013.5,
+        "sensor_id": 1,
+        "loc": "lab"
       },
       {
-        "time": "2026-10-27T12:00:45.000Z",
+        "id": 10,
+        "recorded_at": "2026-10-27T12:00:45.000Z",
         "temperature": 22.56,
         "humidity": 45.25,
-        "pressure": 1013.09
+        "pressure": 1013.09,
+        "sensor_id": 1,
+        "loc": "lab"
       }
     ]
   },
@@ -75,54 +105,84 @@
     },
     "readings": [
       {
-        "time": "2026-10-27T12:00:00.000Z",
+        "id": 1,
+        "recorded_at": "2026-10-27T12:00:00.000Z",
         "eco2": 450,
-        "tvoc": 20
+        "tvoc": 20,
+        "sensor_id": 2,
+        "loc": "lab"
       },
       {
-        "time": "2026-10-27T12:00:05.000Z",
+        "id": 2,
+        "recorded_at": "2026-10-27T12:00:05.000Z",
         "eco2": 453,
-        "tvoc": 21
+        "tvoc": 21,
+        "sensor_id": 2,
+        "loc": "lab"
       },
       {
-        "time": "2026-10-27T12:00:10.000Z",
+        "id": 3,
+        "recorded_at": "2026-10-27T12:00:10.000Z",
         "eco2": 457,
-        "tvoc": 23
+        "tvoc": 23,
+        "sensor_id": 2,
+        "loc": "lab"
       },
       {
-        "time": "2026-10-27T12:00:15.000Z",
+        "id": 4,
+        "recorded_at": "2026-10-27T12:00:15.000Z",
         "eco2": 459,
-        "tvoc": 23
+        "tvoc": 23,
+        "sensor_id": 2,
+        "loc": "lab"
       },
       {
-        "time": "2026-10-27T12:00:20.000Z",
+        "id": 5,
+        "recorded_at": "2026-10-27T12:00:20.000Z",
         "eco2": 462,
-        "tvoc": 24
+        "tvoc": 24,
+        "sensor_id": 2,
+        "loc": "lab"
       },
       {
-        "time": "2026-10-27T12:00:25.000Z",
+        "id": 6,
+        "recorded_at": "2026-10-27T12:00:25.000Z",
         "eco2": 465,
-        "tvoc": 24
+        "tvoc": 24,
+        "sensor_id": 2,
+        "loc": "lab"
       },
       {
-        "time": "2026-10-27T12:00:30.000Z",
+        "id": 7,
+        "recorded_at": "2026-10-27T12:00:30.000Z",
         "eco2": 468,
-        "tvoc": 26
+        "tvoc": 26,
+        "sensor_id": 2,
+        "loc": "lab"
       },
       {
-        "time": "2026-10-27T12:00:35.000Z",
+        "id": 8,
+        "recorded_at": "2026-10-27T12:00:35.000Z",
         "eco2": 471,
-        "tvoc": 27
+        "tvoc": 27,
+        "sensor_id": 2,
+        "loc": "lab"
       },
       {
-        "time": "2026-10-27T12:00:40.000Z",
+        "id": 9,
+        "recorded_at": "2026-10-27T12:00:40.000Z",
         "eco2": 474,
-        "tvoc": 28
+        "tvoc": 28,
+        "sensor_id": 2,
+        "loc": "lab"
       },
       {
-        "time": "2026-10-27T12:00:45.000Z",
+        "id": 10,
+        "recorded_at": "2026-10-27T12:00:45.000Z",
         "eco2": 477,
-        "tvoc": 29
+        "tvoc": 29,
+        "sensor_id": 2,
+        "loc": "lab"
       }
     ]
   },
@@ -132,44 +192,74 @@
     },
     "readings": [
       {
-        "time": "2026-10-27T12:00:00.000Z",
-        "lux": 319.9
+        "id": 1,
+        "recorded_at": "2026-10-27T12:00:00.000Z",
+        "lux": 319.9,
+        "sensor_id": 3,
+        "loc": "lab"
       },
       {
-        "time": "2026-10-27T12:00:05.000Z",
-        "lux": 320.6
+        "id": 2,
+        "recorded_at": "2026-10-27T12:00:05.000Z",
+        "lux": 320.6,
+        "sensor_id": 3,
+        "loc": "lab"
       },
       {
-        "time": "2026-10-27T12:00:10.000Z",
-        "lux": 320.5
+        "id": 3,
+        "recorded_at": "2026-10-27T12:00:10.000Z",
+        "lux": 320.5,
+        "sensor_id": 3,
+        "loc": "lab"
       },
       {
-        "time": "2026-10-27T12:00:15.000Z",
-        "lux": 319.9
+        "id": 4,
+        "recorded_at": "2026-10-27T12:00:15.000Z",
+        "lux": 319.9,
+        "sensor_id": 3,
+        "loc": "lab"
       },
       {
-        "time": "2026-10-27T12:00:20.000Z",
-        "lux": 319.6
+        "id": 5,
+        "recorded_at": "2026-10-27T12:00:20.000Z",
+        "lux": 319.6,
+        "sensor_id": 3,
+        "loc": "lab"
       },
       {
-        "time": "2026-10-27T12:00:25.000Z",
-        "lux": 319.5
+        "id": 6,
+        "recorded_at": "2026-10-27T12:00:25.000Z",
+        "lux": 319.5,
+        "sensor_id": 3,
+        "loc": "lab"
       },
       {
-        "time": "2026-10-27T12:00:30.000Z",
-        "lux": 319.9
+        "id": 7,
+        "recorded_at": "2026-10-27T12:00:30.000Z",
+        "lux": 319.9,
+        "sensor_id": 3,
+        "loc": "lab"
       },
       {
-        "time": "2026-10-27T12:00:35.000Z",
-        "lux": 320.4
+        "id": 8,
+        "recorded_at": "2026-10-27T12:00:35.000Z",
+        "lux": 320.4,
+        "sensor_id": 3,
+        "loc": "lab"
       },
       {
-        "time": "2026-10-27T12:00:40.000Z",
-        "lux": 320.6
+        "id": 9,
+        "recorded_at": "2026-10-27T12:00:40.000Z",
+        "lux": 320.6,
+        "sensor_id": 3,
+        "loc": "lab"
       },
       {
-        "time": "2026-10-27T12:00:45.000Z",
-        "lux": 320.2
+        "id": 10,
+        "recorded_at": "2026-10-27T12:00:45.000Z",
+        "lux": 320.2,
+        "sensor_id": 3,
+        "loc": "lab"
       }
     ]
   }
