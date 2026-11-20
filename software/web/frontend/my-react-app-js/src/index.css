@@ -49,9 +49,13 @@
     filter: invert(1) brightness(2);
   }
 }
+button {
+    font-family: 'Roboto';
+}
 
 body {
   margin: 0;
+  font-family: 'Roboto';
 }
 
 #root {
@@ -71,6 +75,8 @@ h2 {
   font-family: var(--heading);
   font-weight: 500;
   color: var(--text-h);
+  font-family: 'Roboto';
+
 }
 
 h1 {

@@ -53,6 +53,7 @@ function App() {
   return (
     <>
       <h1>MESS</h1>
+      {/*button interface to select what to display*/ }
       <div style={{ marginBottom: "20px" }}>
         <button onClick={() => setState("bme")}>BME280</button>
         <button onClick={() => setState("sgp")}>SGP30</button>
@@ -61,6 +62,7 @@ function App() {
         <button onClick={() => setState("analysis")}>Analysis</button>
       </div>
 
+    {/*display basic info on what MESS is and what the sensors do*/}
       {web_state === "info" && (
         <>
           <h2>What is MESS</h2>
@@ -88,6 +90,8 @@ function App() {
         </>
       )}
 
+      {/*display the sensor clicked*/}
+      {/*that being the corresponding data and a graph showing the data*/}
       {sensor && (
         <>
           <div style={{display: "flex", justifyContent: "space-evenly",}}>
