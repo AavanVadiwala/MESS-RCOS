@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import RefreshRing from "./RefreshRing";
 
+// readings older than this get a "(stale)" marker
+const STALE_MS = 10 * 60 * 1000;
+
 // One box per location, each showing that location's newest reading of every
 // sensor. Polls GET /api/latest (see software/web/server.js).
 // sensors: the SENSORS map from App.jsx ({ key: { title, type, columns } })
@@ -60,6 +63,12 @@ function LiveView({ sensors, intervalMs = 2000 }) {
               .filter((s) => byLoc[loc][s.type])
               .map((s) => {
                 const row = byLoc[loc][s.type];
+                const stale = Date.now() - new Date(row.recorded_at).getTime() > STALE_MS;
+                const badge = stale && (
+                  <span className="stale">
+                    <span className="stale-square" /> (stale)
+                  </span>
+                );
                 return (
                   <details className="live-sensor" key={s.type} open>
                     <summary><h4>{s.title}</h4></summary>
@@ -69,7 +78,7 @@ function LiveView({ sensors, intervalMs = 2000 }) {
                         <span className="live-label">{c.label}</span>
                       </div>
                     ))}
-                    <p className="live-meta">{new Date(row.recorded_at).toLocaleString()}</p>
+                    <p className="live-meta">{new Date(row.recorded_at).toLocaleString()} {badge}</p>
                   </details>
                 );
               })}

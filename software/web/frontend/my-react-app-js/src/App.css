@@ -261,6 +261,17 @@ th.sorted .arrow {
   margin: 0 0 6px;
   opacity: 0.8;
 }
+.stale {
+  white-space: nowrap;
+  font-size: 0.85rem;
+}
+.stale-square {
+  display: inline-block;
+  width: 0.75em;
+  height: 0.75em;
+  background: #f5c518;
+  vertical-align: baseline;
+}
 .live-value {
   display: flex;
   flex-direction: column;
