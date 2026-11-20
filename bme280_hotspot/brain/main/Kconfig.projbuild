@@ -1,0 +1,49 @@
+menu "MESS BME280 gateway"
+config MESS_GW_SSID
+    string "Hotspot name"
+    default "MESS-BME280"
+config MESS_GW_PASSWORD
+    string "Hotspot password (8..63 characters, required)"
+    default ""
+config MESS_GW_CHANNEL
+    int "Wi-Fi channel"
+    range 1 11
+    default 6
+menu "Internet uplink (optional)"
+    comment "Leave the network name empty to keep readings local (USB and the hotspot page)."
+config MESS_GW_UPLINK_SSID
+    string "Internet Wi-Fi name, 2.4 GHz (e.g. eduroam)"
+    default ""
+config MESS_GW_UPLINK_PASSWORD
+    string "Password for a normal WPA2 network (leave empty for eduroam)"
+    default ""
+config MESS_GW_EAP_USERNAME
+    string "eduroam username, e.g. rcsid@rpi.edu (empty = normal WPA2 network)"
+    default ""
+config MESS_GW_EAP_PASSWORD
+    string "eduroam password"
+    default ""
+config MESS_GW_EAP_IDENTITY
+    string "eduroam outer identity (empty = same as username)"
+    default ""
+config MESS_GW_EAP_SERVER_NAME
+    string "eduroam RADIUS server name to verify"
+    default "radiusauth.net.rpi.edu"
+config MESS_GW_SUPABASE_URL
+    string "Supabase project URL, e.g. https://abcd.supabase.co"
+    default ""
+config MESS_GW_SUPABASE_KEY
+    string "Supabase publishable (anon) key"
+    default ""
+config MESS_GW_UPLOAD_KEY
+    string "Upload key (its SHA-256 hash is stored in Supabase private.upload_keys)"
+    default ""
+config MESS_GW_VISITOR_KEY
+    string "Visitor relay key: phones viewing the hotspot page upload with it (empty = relay off)"
+    default ""
+    help
+        A separate key from MESS_GW_UPLOAD_KEY, so it can be revoked on its own. The page at
+        http://192.168.4.1/ fetches it from /relay, so anyone on the hotspot can read it.
+        Uses MESS_GW_SUPABASE_URL and MESS_GW_SUPABASE_KEY; no uplink network is needed.
+endmenu
+endmenu
