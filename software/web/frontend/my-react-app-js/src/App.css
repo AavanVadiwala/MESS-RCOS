@@ -182,3 +182,68 @@
     border-right-color: var(--border);
   }
 }
+
+/* Sortable headers */
+th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+th.sortable:hover {
+  color: var(--text);
+}
+th.sorted {
+  color: var(--accent);
+}
+th .arrow {
+  margin-left: 6px;
+  font-size: 0.7rem;
+  opacity: 0.5;
+}
+th.sorted .arrow {
+  opacity: 1;
+}
+
+/* Filter controls: one row, wrapping whole groups onto the next line */
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 12px 24px;
+  margin-bottom: 16px;
+}
+.controls > *,
+.controls form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+.controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.controls input:not([type="checkbox"]) {
+  width: auto;
+  min-width: 0;
+}
+.controls input[type="datetime-local"] {
+  font-size: 0.9rem;
+}
+.controls input:not([type="checkbox"]):not([type="datetime-local"]) {
+  width: 9rem;
+}
+
+/* Center the table */
+.table-wrap {
+  width: fit-content;   /* box hugs the table instead of filling the row */
+  max-width: 100%;      /* never wider than the card */
+  margin: 0 auto;       /* center the box */
+  overflow-x: auto;     /* scroll sideways if the table is too wide */
+}
+
+table {
+  width: auto;
+}

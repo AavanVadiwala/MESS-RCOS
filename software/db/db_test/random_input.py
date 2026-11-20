@@ -49,11 +49,12 @@ def output_readings(cur, sensor):
 
 def main():
     with psycopg.connect(
-        host=os.getenv("DB_HOST", "localhost"),
+        host="127.0.0.1",
         port=5432,
         dbname=os.environ["POSTGRES_DB"],
         user=os.environ["POSTGRES_USER"],
         password=os.environ["POSTGRES_PASSWORD"],
+        connect_timeout=5,
     ) as conn:
         with conn.cursor() as cur:
             for sensor in SENSORS:
