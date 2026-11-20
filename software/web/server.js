@@ -43,6 +43,8 @@ function isValidRow(r, type) {
 
 // Usage: /api/bme280?limit=50  -> newest N rows (default 10, max 1000)
 //        /api/bme280?limit=-1  -> every row in bme280_data
+//        /api/bme280?from=2026-11-20T00:00:00Z&to=...  -> only rows recorded in that range
+//        /api/bme280?loc=lab  -> only rows whose loc is exactly "lab"
 app.get('/api/:type', async (req, res) => {
   const type = req.params.type;
   if (!SENSOR_TYPE.includes(type)) {
@@ -57,10 +59,32 @@ app.get('/api/:type', async (req, res) => {
       return res.status(400).json({ error: `Expected limit to be -1 (all rows) or an integer from 1 to ${MAX_LIMIT}` });
     }
   }
+  // optional from/to (ISO date-times) bound recorded_at
+  const range = {};
+  for (const k of ['from', 'to']) {
+    range[k] = null;
+    if (req.query[k]) {
+      const d = new Date(req.query[k]);
+      if (typeof req.query[k] !== 'string' || Number.isNaN(d.getTime())) {
+        return res.status(400).json({ error: `Expected ${k} to be an ISO date-time` });
+      }
+      range[k] = d;
+    }
+  }
+  // optional loc keeps only rows from that exact location
+  if (req.query.loc !== undefined && typeof req.query.loc !== 'string') {
+    return res.status(400).json({ error: 'Expected loc to be a string' });
+  }
+  const loc = req.query.loc || null;
   try {
     // LIMIT NULL in Postgres = no limit, so -1 returns the whole table
-    const result = await pool.query(`SELECT * FROM ${type}_data ORDER BY id DESC LIMIT $1`,
-      [limit === -1 ? null : limit]);
+    const result = await pool.query(
+      `SELECT * FROM ${type}_data
+       WHERE ($2::timestamptz IS NULL OR recorded_at >= $2)
+         AND ($3::timestamptz IS NULL OR recorded_at <= $3)
+         AND ($4::text IS NULL OR loc = $4)
+       ORDER BY id DESC LIMIT $1`,
+      [limit === -1 ? null : limit, range.from, range.to, loc]);
     const bad = result.rows.filter((r) => !isValidRow(r, type));
     if (bad.length) {
       console.error(`Malformed ${type}_data rows:`, bad);

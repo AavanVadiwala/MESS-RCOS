@@ -3,7 +3,9 @@ import { useEffect, useMemo, useState } from "react";
 // Polls GET /api/:type (see software/web/server.js) and renders the rows.
 // columns: [{ key: "temperature", label: "Temperature (C)" }, ...]
 // Click a column header to sort by it; click again to reverse.
-function SensorTable({ type, columns, limit = 10, intervalMs = 2000 }) {
+// timeFrom/timeTo are datetime-local values ("YYYY-MM-DDTHH:MM", local time,
+// either may be empty) sent to the API to bound recorded_at.
+function SensorTable({ type, columns, limit = 10, intervalMs = 2000, timeFrom = "", timeTo = "", loc = "" }) {
   const [rows, setRows] = useState([]);
   const [error, setError] = useState(null);
   const [sort, setSort] = useState({ key: "recorded_at", dir: "desc" });
@@ -13,7 +15,13 @@ function SensorTable({ type, columns, limit = 10, intervalMs = 2000 }) {
 
     async function load() {
       try {
-        const res = await fetch(`/api/${type}?limit=${limit}`);
+        const params = new URLSearchParams({ limit });
+        for (const [k, v] of [["from", timeFrom], ["to", timeTo]]) {
+          const d = new Date(v);
+          if (v && !Number.isNaN(d.getTime())) params.set(k, d.toISOString());
+        }
+        if (loc) params.set("loc", loc);
+        const res = await fetch(`/api/${type}?${params}`);
         const body = await res.json();
         if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
         if (!cancelled) {
@@ -31,7 +39,7 @@ function SensorTable({ type, columns, limit = 10, intervalMs = 2000 }) {
       cancelled = true;
       clearInterval(id);
     };
-  }, [type, limit, intervalMs]);
+  }, [type, limit, intervalMs, timeFrom, timeTo, loc]);
 
   const sortedRows = useMemo(() => {
     const value = (r) =>

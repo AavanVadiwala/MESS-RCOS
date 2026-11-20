@@ -30,10 +30,21 @@ const SENSORS = {
 // Shiny container is published on 3838 (see software/docker-compose.yml)
 const SHINY_URL = `${window.location.protocol}//${window.location.hostname}:3838/`;
 
+// today's local date as YYYY-MM-DD, for the datetime-local defaults
+const today = () => {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+
 function App() {
   const [web_state, setState] = useState("info");
   const [render_limit, setlimit] = useState(10);
-  const [interval, setInterval] = useState(2000);
+  const [locEnabled, setLocEnabled] = useState(false);
+  const [locValue, setLocValue] = useState("");
+  const [timeEnabled, setTimeEnabled] = useState(false);
+  const [timeFrom, setTimeFrom] = useState(`${today()}T00:00`);
+  const [timeTo, setTimeTo] = useState(`${today()}T23:59`);
   const sensor = SENSORS[web_state];
 
   const handleLimit = (e) => {
@@ -41,13 +52,6 @@ function App() {
     const form = e.target;
     const formData = new FormData(form);
     setlimit(formData.get("query"));
-  };
-
-  const handleTime = (e) => {
-    e.preventDefault();
-    const form = e.target;
-    const formData = new FormData(form);
-    setInterval(formData.get("query"));
   };
 
   return (
@@ -94,16 +98,35 @@ function App() {
       {/*that being the corresponding data and a graph showing the data*/}
       {sensor && (
         <>
-          <div style={{display: "flex", justifyContent: "space-evenly",}}>
+          <div className="controls">
             <form onSubmit={handleLimit}>
-              <input name="query"></input>
-              <button type="submit">Set Limit</button>
+              <label>
+                Load latest:{" "}
+                <input name="query" defaultValue={render_limit}></input>
+              </label>
+              <button type="submit">Go</button>
             </form>
 
-            <form onSubmit={handleTime}>
-              <input name="query"></input>
-              <button type="submit">Set Time</button>
-            </form>
+            <div>
+              <label>
+                <input type="checkbox" checked={timeEnabled} onChange={(e) => setTimeEnabled(e.target.checked)} />
+                {" "}Time filter{" "}
+              </label>
+              <label>
+                From <input type="datetime-local" value={timeFrom} disabled={!timeEnabled} onChange={(e) => setTimeFrom(e.target.value)} />
+              </label>{" "}
+              <label>
+                to <input type="datetime-local" value={timeTo} disabled={!timeEnabled} onChange={(e) => setTimeTo(e.target.value)} />
+              </label>
+            </div>
+
+            <div>
+              <label>
+                <input type="checkbox" checked={locEnabled} onChange={(e) => setLocEnabled(e.target.checked)} />
+                {" "}Location filter{" "}
+              </label>
+              <input value={locValue} disabled={!locEnabled} onChange={(e) => setLocValue(e.target.value)} />
+            </div>
           </div>
 
           <h2>{sensor.title}</h2>
@@ -112,7 +135,9 @@ function App() {
             type={sensor.type}
             columns={sensor.columns}
             limit={render_limit}
-            intervalMs={interval}
+            timeFrom={timeEnabled ? timeFrom : ""}
+            timeTo={timeEnabled ? timeTo : ""}
+            loc={locEnabled ? locValue.trim() : ""}
           />
         </>
       )}
