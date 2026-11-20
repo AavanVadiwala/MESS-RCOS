@@ -203,6 +203,90 @@ th.sorted .arrow {
   opacity: 1;
 }
 
+/* Refresh ring: fills once per poll interval */
+.refresh-ring {
+  vertical-align: middle;
+  transform: rotate(-90deg); /* start filling from the top */
+}
+.refresh-ring circle {
+  fill: none;
+  stroke-width: 3;
+}
+.ring-track {
+  stroke: var(--border);
+}
+.ring-fill {
+  stroke: var(--accent);
+  stroke-dasharray: var(--ring-len);
+  stroke-dashoffset: var(--ring-len);
+  animation-name: ring-fill;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+@keyframes ring-fill {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Live view: one card per sensor */
+.live-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 16px;
+}
+.live-card {
+  flex: 1 1 220px;
+  max-width: 320px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.live-card summary,
+.live-sensor summary {
+  cursor: pointer;
+}
+.live-card summary h3,
+.live-sensor summary h4 {
+  display: inline;
+  margin: 0;
+}
+.live-sensor {
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+}
+.live-sensor h4 {
+  margin: 0 0 6px;
+  opacity: 0.8;
+}
+.stale {
+  white-space: nowrap;
+  font-size: 0.85rem;
+}
+.stale-square {
+  display: inline-block;
+  width: 0.75em;
+  height: 0.75em;
+  background: #f5c518;
+  vertical-align: baseline;
+}
+.live-value {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 8px;
+}
+.live-number {
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+.live-label,
+.live-meta {
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+
 /* Filter controls: one row, wrapping whole groups onto the next line */
 .controls {
   display: flex;

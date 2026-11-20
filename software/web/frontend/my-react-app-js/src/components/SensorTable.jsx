@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import RefreshRing from "./RefreshRing";
 
 // Polls GET /api/:type (see software/web/server.js) and renders the rows.
 // columns: [{ key: "temperature", label: "Temperature (C)" }, ...]
@@ -78,6 +79,10 @@ function SensorTable({ type, columns, limit = 10, intervalMs = 2000, timeFrom = 
 
   return (
     <>
+      <p>
+        {/* key restarts the ring whenever the poll effect restarts */}
+        <RefreshRing key={`${type}|${limit}|${intervalMs}|${timeFrom}|${timeTo}|${loc}`} intervalMs={intervalMs} /> Next update
+      </p>
       {error && <p className="error">Error: {error}</p>}
       <div className="table-wrap">
         <table>

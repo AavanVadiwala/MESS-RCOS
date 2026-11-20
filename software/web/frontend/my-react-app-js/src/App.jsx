@@ -1,6 +1,7 @@
 import { useState } from "react";
 import "./App.css";
 import SensorTable from "./components/SensorTable";
+import LiveView from "./components/LiveView";
 
 const SENSORS = {
   bme: {
@@ -58,6 +59,7 @@ function App() {
     <>
       <h1>MESS</h1>
       <div style={{ marginBottom: "20px" }}>
+        <button onClick={() => setState("live")}>Live View</button>
         <button onClick={() => setState("bme")}>BME280</button>
         <button onClick={() => setState("sgp")}>SGP30</button>
         <button onClick={() => setState("bh")}>BH1750</button>
@@ -79,6 +81,13 @@ function App() {
           <p>Multi-pixel gas sensor</p>
           <h3>BH1750</h3>
           <p>Ambient light sensor</p>
+        </>
+      )}
+
+      {web_state === "live" && (
+        <>
+          <h2>Live View</h2>
+          <LiveView sensors={SENSORS} />
         </>
       )}
 
