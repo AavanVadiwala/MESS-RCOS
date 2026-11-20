@@ -41,6 +41,30 @@ function isValidRow(r, type) {
     && SENSOR_COLUMNS[type].every((c) => typeof r[c] === 'number' && Number.isFinite(r[c]));
 }
 
+// Usage: /api/latest  -> { bme280: [...], sgp30: [...], bh1750: [...] } with the newest row
+//        for every loc of each sensor. Declared before /api/:type so it isn't read as a type.
+app.get('/api/latest', async (_req, res) => {
+  try {
+    const out = {};
+    for (const type of SENSOR_TYPE) {
+      const result = await pool.query(
+        `SELECT DISTINCT ON (loc) * FROM ${type}_data ORDER BY loc, id DESC`);
+      const bad = result.rows.filter((r) => !isValidRow(r, type));
+      if (bad.length) {
+        console.error(`Malformed ${type}_data rows:`, bad);
+        return res.status(500).json({
+          error: `Expected {id, recorded_at, ${SENSOR_COLUMNS[type].join(', ')}, sensor_id, loc}`,
+        });
+      }
+      out[type] = result.rows;
+    }
+    res.json(out);
+  } catch (err) {
+    console.error('Error executing query', err.stack);
+    res.status(500).json({ error: 'Error retrieving data' });
+  }
+});
+
 // Usage: /api/bme280?limit=50  -> newest N rows (default 10, max 1000)
 //        /api/bme280?limit=-1  -> every row in bme280_data
 //        /api/bme280?from=2026-11-20T00:00:00Z&to=...  -> only rows recorded in that range
