@@ -203,6 +203,39 @@ th.sorted .arrow {
   opacity: 1;
 }
 
+/* Filter controls: one row, wrapping whole groups onto the next line */
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 12px 24px;
+  margin-bottom: 16px;
+}
+.controls > *,
+.controls form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+.controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.controls input:not([type="checkbox"]) {
+  width: auto;
+  min-width: 0;
+}
+.controls input[type="datetime-local"] {
+  font-size: 0.9rem;
+}
+.controls input:not([type="checkbox"]):not([type="datetime-local"]) {
+  width: 9rem;
+}
+
 /* Center the table */
 .table-wrap {
   width: fit-content;   /* box hugs the table instead of filling the row */
