@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MESS BME280 Live</title>
+<style>
+  :root { --ink:#000; --muted:#555; --rule:#ccc; --grid:#e4e4e4; --bg:#fff; --warn:#000;
+          --s0:#2563eb; --s1:#dc2626; --s2:#16a34a; --s3:#9333ea; --s4:#ea580c; --s5:#0891b2; --s6:#a16207; --s7:#db2777; }
+  @media (prefers-color-scheme: dark) { :root { --ink:#eee; --muted:#aaa; --rule:#444; --grid:#2a2a2a; --bg:#111;
+          --s0:#60a5fa; --s1:#f87171; --s2:#4ade80; --s3:#c084fc; --s4:#fb923c; --s5:#22d3ee; --s6:#facc15; --s7:#f472b6; } }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:Arial,Helvetica,sans-serif; }
+  main { max-width:1100px; margin:0 auto; padding:20px 16px 40px; }
+  h1 { margin:0 0 4px; font-size:28px; }
+  .lede,.hint,footer { color:var(--muted); font-size:13px; }
+  .banner { border:2px solid var(--ink); padding:12px; margin:16px 0; }
+  .banner.stale { border-style:dashed; }
+  .controls { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }
+  button, a.btn { font:inherit; font-size:13px; background:var(--bg); color:var(--ink); border:1px solid var(--ink); padding:6px 12px; cursor:pointer; text-decoration:none; }
+  button[aria-pressed="true"] { background:var(--ink); color:var(--bg); }
+  .panel { border:1px solid var(--rule); padding:14px; margin-bottom:16px; }
+  .panel h2 { margin:0; font-size:18px; }
+  .panel .hint { margin:2px 0 8px; }
+  .chart { position:relative; }
+  svg { display:block; width:100%; height:220px; overflow:visible; }
+  svg text { fill:var(--muted); font-size:11px; font-variant-numeric:tabular-nums; }
+  #connect { font-weight:bold; }
+  .connect-hint { font-size:13px; color:var(--muted); }
+  .table-wrap { overflow-x:auto; margin-bottom:16px; border:1px solid var(--rule); }
+  table.sensors { border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums; }
+  .sensors th, .sensors td { text-align:left; padding:8px 12px; border-bottom:1px solid var(--rule); white-space:nowrap; }
+  .sensors th { font-size:12px; color:var(--muted); font-weight:normal; }
+  .sensors td.num { font-size:18px; font-weight:bold; }
+  .sensors tr:last-child td { border-bottom:none; }
+  .sensors tr.silent td { color:var(--muted); }
+  .swatch { display:inline-block; width:22px; height:0; border-top:3px solid; vertical-align:middle; margin-right:6px; }
+  .legend { display:flex; flex-wrap:wrap; gap:4px 14px; font-size:12px; color:var(--muted); margin-bottom:4px; }
+  .readout { position:absolute; top:0; right:0; font-size:12px; color:var(--ink); font-variant-numeric:tabular-nums; background:var(--bg); }
+</style>
+</head>
+<body>
+<main>
+  <h1>MESS BME280 Live</h1>
+  <p class="lede">Temperature, humidity and pressure from the MESS gas team's BME280 sensors. BME280 does not measure gas.</p>
+  <div id="banner" class="banner">Loading readings…</div>
+  <p class="connect-hint" id="connect-hint">Have the brain ESP32? Plug it into this computer's USB and press <strong>Connect brain</strong> to see readings live. Nothing to install.</p>
+  <div class="controls" role="group" aria-label="Time range">
+    <button data-seconds="300" aria-pressed="false">5 minutes</button>
+    <button data-seconds="3600" aria-pressed="true">1 hour</button>
+    <button data-seconds="21600" aria-pressed="false">6 hours</button>
+    <button data-seconds="86400" aria-pressed="false">24 hours</button>
+    <button id="connect">Connect brain (USB)</button>
+    <a class="btn" id="download" download="mess-bme280.csv" href="#">Download CSV</a>
+  </div>
+  <div class="table-wrap">
+    <table class="sensors" aria-label="Sensors">
+      <thead><tr><th>Sensor</th><th>Temperature</th><th>Humidity</th><th>Pressure</th><th>Signal to brain</th><th>Missed (5 min)</th><th>Last reading</th></tr></thead>
+      <tbody id="sensor-rows"><tr><td colspan="7" class="hint">No sensors yet.</td></tr></tbody>
+    </table>
+  </div>
+  <section class="panel"><h2>Temperature</h2><p class="hint">°C · nearby board heat can raise this</p><div class="chart" id="c-temperature_c"></div></section>
+  <section class="panel"><h2>Relative humidity</h2><p class="hint">%RH</p><div class="chart" id="c-humidity_pct"></div></section>
+  <section class="panel"><h2>Pressure</h2><p class="hint">hPa · local absolute pressure, not sea-level corrected</p><div class="chart" id="c-pressure_hpa"></div></section>
+  <footer>Each sensor is named by the last four characters of its board ID and keeps its colour on every graph. When the brain is online it uploads every 10 seconds and this page shows those readings from anywhere. Connect brain needs Chrome or Edge on a laptop or desktop; live readings show only on the computer the brain is plugged into. Otherwise this page shows readings published about every 6 minutes by a computer running the bridge; GitHub Pages can add up to 10 minutes of caching, so expect readings to be 5–20 minutes old. Gaps mean a sensor or the brain was offline; no values are filled in.</footer>
+</main>
+<script>
+const FIELDS = {
+  temperature_c: {unit: '°C', digits: 2},
+  humidity_pct: {unit: '%RH', digits: 1},
+  pressure_hpa: {unit: 'hPa', digits: 2},
+};
+const GAP_S = 60, LIVE_GAP_S = 5; /* Published points are 10 s apart, live ones 1 s. */
+/* Where the brain uploads over the internet. Both values are public by design: the key can only
+ * call the read and upload functions in supabase/schema.sql, and uploads also need the brain's own key. */
+const SUPABASE = {url: 'https://imaoyqoegvrdtqiqzlvh.supabase.co', key: 'sb_publishable_cTJj9EWJ9x8CFQF3MKAPFA_o5ySAsIK'};
+const CLOUD_STALE_S = 120;
+
+/* view.nodes maps a sensor ID to its readings:
+ * {t: [], temperature_c: [], humidity_pct: [], pressure_hpa: [], rssi, missed, last, link}. */
+let view = null, span = 3600, source = 'published';
+const colours = new Map(); /* sensor ID -> palette slot, stable for the whole visit */
+
+const fmtTime = t => new Date(t * 1000).toLocaleTimeString([], span < 3600
+  ? {hour: '2-digit', minute: '2-digit', second: '2-digit'} : {hour: '2-digit', minute: '2-digit'});
+const ago = s => s < 90 ? Math.round(s) + ' s' : s < 5400 ? Math.round(s / 60) + ' min' : (s / 3600).toFixed(1) + ' h';
+const signalWord = dbm => dbm >= -60 ? 'strong' : dbm >= -75 ? 'fair' : 'weak';
+const label = id => id === 'usb' ? 'USB sensor' : id === 'sensor' ? 'Sensor' : '…' + id.slice(-4);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+const emptySeries = () => ({t: [], temperature_c: [], humidity_pct: [], pressure_hpa: [],
+  rssi: null, missed: null, last: 0, link: false});
+
+function colour(id) {
+  if (!colours.has(id)) colours.set(id, colours.size);
+  const slot = colours.get(id);
+  return {stroke: `var(--s${slot % 8})`, dash: slot < 8 ? '' : '6 3'};
+}
+
+function niceTicks(lo, hi, n) {
+  const raw = (hi - lo) / n, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(s => s >= raw);
+  const out = [];
+  for (let v = Math.ceil(lo / step) * step; v <= hi + step * 1e-9; v += step) out.push(+v.toFixed(10));
+  return {ticks: out, step};
+}
+
+/* Sensors in the order they were first seen, which is also their colour order. */
+function sortedIds() {
+  const ids = [...view.nodes.keys()].sort();
+  ids.forEach(colour); /* new sensors get the next colours, alphabetically */
+  return ids.sort((a, b) => colours.get(a) - colours.get(b));
+}
+
+function drawChart(field) {
+  const box = document.getElementById('c-' + field);
+  const t0 = view.generated_at_s - span, xlo = t0, xhi = view.generated_at_s;
+  const lines = [];
+  for (const id of sortedIds()) {
+    const s = view.nodes.get(id);
+    const idx = s.t.map((t, i) => i).filter(i => s.t[i] >= t0);
+    if (idx.length) lines.push({id, s, idx});
+  }
+  if (!lines.length) { box.innerHTML = '<p class="hint">No readings in this range.</p>'; return; }
+  const W = box.clientWidth || 600, H = 220, L = 64, R = 8, T = 18, B = 24;
+  const ys = lines.flatMap(l => l.idx.map(i => l.s[field][i]));
+  let lo = Math.min(...ys), hi = Math.max(...ys);
+  if (hi - lo < 1e-9) { lo -= 1; hi += 1; }
+  const pad = (hi - lo) * 0.08; lo -= pad; hi += pad;
+  const x = t => L + (t - xlo) / (xhi - xlo) * (W - L - R);
+  const y = v => T + (hi - v) / (hi - lo) * (H - T - B);
+  const yt = niceTicks(lo, hi, 4), digits = Math.max(0, -Math.floor(Math.log10(yt.step)));
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${field} for ${lines.length} sensor(s) over the last ${ago(span)}">`;
+  for (const v of yt.ticks) svg += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v.toFixed(digits)}</text>`;
+  for (let k = 0; k <= 4; k++) { const t = xlo + k * (xhi - xlo) / 4; svg += `<text x="${x(t)}" y="${H - 6}" text-anchor="middle">${fmtTime(t)}</text>`; }
+  for (const {id, s, idx} of lines) {
+    const gap = s.live ? LIVE_GAP_S : view.gap_s || GAP_S;
+    let d = '', prev = null;
+    for (const i of idx) {
+      d += (prev === null || s.t[i] - prev > gap ? 'M' : 'L') + x(s.t[i]).toFixed(1) + ',' + y(s[field][i]).toFixed(1);
+      prev = s.t[i];
+    }
+    const c = colour(id);
+    svg += `<path d="${d}" fill="none" stroke="${c.stroke}" stroke-dasharray="${c.dash}" stroke-width="1.8" stroke-linejoin="round"><title>${esc(label(id))}</title></path>`;
+  }
+  svg += `<line class="cursor" y1="${T}" y2="${H - B}" stroke="var(--muted)" stroke-dasharray="3 3" visibility="hidden"/><circle class="dot" r="3.5" visibility="hidden"/></svg>`;
+  const legend = lines.length > 1 ? '<div class="legend">' + lines.map(({id}) =>
+    `<span><span class="swatch" style="border-color:${colour(id).stroke};border-top-style:${colour(id).dash ? 'dashed' : 'solid'}"></span>${esc(label(id))}</span>`).join('') + '</div>' : '';
+  box.innerHTML = legend + svg + '<div class="readout"></div>';
+  const el = box.querySelector('svg'), cursor = el.querySelector('.cursor'), dot = el.querySelector('.dot'), readout = box.querySelector('.readout');
+  el.addEventListener('pointermove', e => {
+    const r = el.getBoundingClientRect(), px = (e.clientX - r.left) / r.width * W, py = (e.clientY - r.top) / r.height * H;
+    let best = null, bestD = Infinity;
+    for (const l of lines) for (const i of l.idx) { /* nearest point on screen, across all sensors */
+      const d = Math.abs(x(l.s.t[i]) - px) * 4 + Math.abs(y(l.s[field][i]) - py);
+      if (d < bestD) { bestD = d; best = {l, i}; }
+    }
+    const {l, i} = best, cx = x(l.s.t[i]), cy = y(l.s[field][i]);
+    cursor.setAttribute('x1', cx); cursor.setAttribute('x2', cx); cursor.setAttribute('visibility', 'visible');
+    dot.setAttribute('cx', cx); dot.setAttribute('cy', cy); dot.setAttribute('fill', colour(l.id).stroke); dot.setAttribute('visibility', 'visible');
+    readout.textContent = `${label(l.id)} · ${fmtTime(l.s.t[i])} · ${l.s[field][i].toFixed(FIELDS[field].digits)} ${FIELDS[field].unit}`;
+  });
+  el.addEventListener('pointerleave', () => { cursor.setAttribute('visibility', 'hidden'); dot.setAttribute('visibility', 'hidden'); readout.textContent = ''; });
+}
+
+function renderSensors(now, silentAfter) {
+  const rows = sortedIds().map(id => {
+    const s = view.nodes.get(id), n = s.t.length;
+    const last = s.last || (n ? s.t[n - 1] : 0), silent = !last || now - last > silentAfter;
+    const value = f => n ? `${s[f][n - 1].toFixed(FIELDS[f].digits)} ${FIELDS[f].unit}` : '—';
+    const signal = Number.isFinite(s.rssi) && s.rssi > -127 ? `${s.rssi} dBm · ${signalWord(s.rssi)}` : '—';
+    const c = colour(id);
+    return `<tr class="${silent ? 'silent' : ''}"><td><span class="swatch" style="border-color:${c.stroke};border-top-style:${c.dash ? 'dashed' : 'solid'}"></span><span title="${esc(id)}">${esc(label(id))}</span></td>` +
+      `<td class="num">${value('temperature_c')}</td><td class="num">${value('humidity_pct')}</td><td class="num">${value('pressure_hpa')}</td>` +
+      `<td>${signal}</td><td>${Number.isFinite(s.missed) ? s.missed.toLocaleString() : '—'}</td><td>${last ? ago(now - last) + ' ago' + (silent ? ' (silent)' : '') : '—'}</td></tr>`;
+  });
+  document.getElementById('sensor-rows').innerHTML = rows.join('') || '<tr><td colspan="7" class="hint">No sensors yet.</td></tr>';
+}
+
+function render() {
+  const banner = document.getElementById('banner');
+  const now = Date.now() / 1000;
+  const ids = [...view.nodes.keys()];
+  const last = Math.max(0, ...ids.map(id => { const s = view.nodes.get(id); return s.last || s.t[s.t.length - 1] || 0; }));
+  const age = now - last, count = ids.length;
+  let silentAfter = source === 'live' ? LIVE_GAP_S : source === 'cloud' ? CLOUD_STALE_S : 30 * 60;
+  const reporting = ids.filter(id => { const s = view.nodes.get(id); return now - (s.last || s.t[s.t.length - 1] || 0) <= silentAfter; }).length;
+  const who = count === 1 ? '1 sensor' : reporting === count ? `${count} sensors` : `${reporting} of ${count} sensors reporting`;
+  banner.className = 'banner';
+  if (source === 'live') {
+    const wifi = ids.some(id => view.nodes.get(id).link);
+    if (!count) banner.innerHTML = '<strong>CONNECTED</strong> — waiting for the first reading (one per second per sensor). If none arrive, check that the sensors have power and are near the brain.';
+    else if (age > LIVE_GAP_S) { banner.className = 'banner stale'; banner.innerHTML = `<strong>SENSORS SILENT</strong> — no reading for ${ago(age)}. The brain is still connected; check the sensors' power and distance.`; }
+    else if (wifi) banner.innerHTML = `<strong>LIVE OVER WI-FI</strong> — ${who} → brain → USB → this computer · shown on this computer only`;
+    else banner.innerHTML = '<strong>LIVE FROM USB</strong> — sensor wired directly to this computer, no Wi-Fi link · shown on this computer only';
+  } else if (source === 'cloud') {
+    if (!count || age > CLOUD_STALE_S) {
+      banner.className = 'banner stale';
+      banner.innerHTML = `<strong>BRAIN OFFLINE</strong> — last reading ${last ? ago(age) + ' ago (' + new Date(last * 1000).toLocaleString() + ')' : 'unknown'}. Check the brain's power and internet connection.`;
+    } else banner.innerHTML = `<strong>LIVE OVER THE INTERNET</strong> — ${who} → brain → internet → this page · newest reading ${ago(age)} ago, refreshing every 10 s`;
+  } else if (!count) {
+    banner.textContent = 'No readings published yet.';
+  } else {
+    const stale = age > 30 * 60;
+    banner.className = 'banner' + (stale ? ' stale' : '');
+    banner.innerHTML = `<strong>${stale ? 'NOT CURRENTLY REPORTING' : 'LIVE'}</strong> — ${count === 1 ? '1 sensor' : count + ' sensors'}, last reading ${ago(age)} ago` +
+      ` (${new Date(last * 1000).toLocaleString()}), published ${ago(now - view.generated_at_s)} ago · one point every ${view.step_s} s`;
+  }
+  renderSensors(now, silentAfter);
+  for (const f in FIELDS) drawChart(f);
+  const rows = ['received_at,sensor,temperature_c,humidity_pct,pressure_hpa'];
+  for (const id of sortedIds()) {
+    const s = view.nodes.get(id);
+    s.t.forEach((t, i) => rows.push([new Date(t * 1000).toISOString(), id, s.temperature_c[i], s.humidity_pct[i], s.pressure_hpa[i]].join(',')));
+  }
+  const link = document.getElementById('download');
+  URL.revokeObjectURL(link.href);
+  link.href = URL.createObjectURL(new Blob([rows.join('\n') + '\n'], {type: 'text/csv'}));
+}
+
+/* Published JSON from the bridge: {nodes: [{node_id, t, ...}]}, or the older single-sensor {t, ...}. */
+function fromPublished(j) {
+  const nodes = new Map();
+  for (const n of j.nodes || [{node_id: 'sensor', ...j}]) {
+    if (!n.t || !n.t.length) continue;
+    nodes.set(n.node_id, {...emptySeries(), t: n.t, temperature_c: n.temperature_c, humidity_pct: n.humidity_pct, pressure_hpa: n.pressure_hpa});
+  }
+  return {generated_at_s: Date.parse(j.generated_at) / 1000, step_s: j.step_s, gap_s: GAP_S, nodes};
+}
+
+/* Supabase bme280_series: {nodes: [{node_id, latest: {...}, t, ...}]}. */
+function fromCloud(j) {
+  const nodes = new Map();
+  for (const n of j.nodes || []) {
+    const l = n.latest || {};
+    nodes.set(n.node_id, {...emptySeries(), t: n.t, temperature_c: n.temperature_c, humidity_pct: n.humidity_pct, pressure_hpa: n.pressure_hpa,
+      rssi: l.rssi_dbm, missed: l.missed_5min, last: l.measured_at ? Date.parse(l.measured_at) / 1000 : 0, link: true});
+  }
+  return {generated_at_s: Date.parse(j.generated_at) / 1000, step_s: j.step_s, gap_s: Math.max(LIVE_GAP_S, j.step_s * 3), nodes};
+}
+
+// Live mode: read the brain (gateway) or a USB-connected sensor straight from the serial port.
+const live = {port: null, reader: null, count: 0, since: Infinity, links: new Map()};
+const LINE = /Temperature: (-?\d+\.\d+) C \| Humidity: (\d+\.\d+) %RH \| Pressure: (\d+\.\d+) hPa/;
+/* MESS-RCOS mesh firmware: "Local|Remote origin=<MAC> session=<n> ... : sensor=bme280 status=ESP_OK C=<C> Pa=<Pa> %RH=<RH>". */
+const MESH = /origin=([0-9a-f:]{17}) session=(\d+)\b.*: sensor=bme280 status=ESP_OK C=(-?[\d.]+) Pa=([\d.]+) %RH=([\d.]+)/;
+const inRange = r => r.temperature_c >= -40 && r.temperature_c <= 85 && r.humidity_pct >= 0 &&
+  r.humidity_pct <= 100 && r.pressure_hpa >= 300 && r.pressure_hpa <= 1100;
+
+function parseLine(line) {
+  let r = null, link = null;
+  const at = line.indexOf('MESS_BME_JSON ');
+  if (at >= 0) {
+    try {
+      const j = JSON.parse(line.slice(at + 14));
+      r = {temperature_c: j.temperature_c, humidity_pct: j.humidity_pct, pressure_hpa: j.pressure_hpa};
+      link = {node: String(j.node_id), boot: j.boot_id, sequence: j.sequence, rssi: j.rssi_dbm};
+    } catch (e) { return null; }
+  } else if (MESH.test(line)) {
+    const m = MESH.exec(line), rssi = /link_RSSI=(-?\d+) dBm/.exec(line);
+    r = {temperature_c: +m[3], humidity_pct: +m[5], pressure_hpa: +m[4] / 100};
+    /* The mesh numbers all sensors' records together, so gaps don't mean lost BME280 readings: no sequence. */
+    link = {node: m[1].replace(/:/g, ''), boot: m[2], rssi: rssi ? +rssi[1] : null};
+  } else {
+    const m = LINE.exec(line);
+    if (m) r = {temperature_c: +m[1], humidity_pct: +m[2], pressure_hpa: +m[3]};
+  }
+  return r && Object.values(r).every(Number.isFinite) && inRange(r) ? {...r, link} : null;
+}
+
+function addLive(r) {
+  const now = Date.now() / 1000, id = r.link ? r.link.node : 'usb';
+  if (!view.nodes.has(id)) view.nodes.set(id, {...emptySeries(), live: true, missed: r.link && r.link.sequence !== undefined ? 0 : null});
+  const s = view.nodes.get(id);
+  s.t.push(now);
+  for (const f in FIELDS) s[f].push(r[f]);
+  s.last = now;
+  if (r.link) { /* each sensor numbers its readings, so a jump within one boot is a reading lost on the way */
+    const k = r.link;
+    if (k.sequence !== undefined && k.boot === s.boot && k.sequence > s.sequence) s.missed += k.sequence - s.sequence - 1;
+    Object.assign(s, {boot: k.boot, sequence: k.sequence, rssi: Number.isFinite(k.rssi) ? k.rssi : s.rssi, link: true});
+  }
+  view.generated_at_s = now;
+  live.count++;
+  render();
+}
+
+function setConnectLabel() {
+  document.getElementById('connect').textContent = live.port ? 'Disconnect brain' : 'Connect brain (USB)';
+}
+
+function setSpan(seconds) {
+  span = seconds;
+  document.querySelectorAll('button[data-seconds]').forEach(o => o.setAttribute('aria-pressed', +o.dataset.seconds === span));
+  if (source === 'cloud') load(); /* the cloud returns each range at its own resolution */
+  else if (view) render();
+}
+
+async function connectBrain() {
+  if (live.port) { await live.reader?.cancel().catch(() => {}); return; } /* ends the read loop, which closes the port */
+  let port;
+  try { port = await navigator.serial.requestPort(); } catch (e) { return; } /* picker cancelled */
+  try {
+    await port.open({baudRate: 115200});
+    /* Release DTR/RTS so the ESP32 is not held in reset or bootloader mode. */
+    await port.setSignals({dataTerminalReady: false, requestToSend: false}).catch(() => {});
+  } catch (e) {
+    document.getElementById('banner').innerHTML = '<strong>COULD NOT OPEN THE PORT</strong> — ' + esc(e.message) + '. Close any serial monitor or bridge using it, then try again.';
+    return;
+  }
+  Object.assign(live, {port, count: 0, since: Date.now() / 1000});
+  source = 'live';
+  view = {generated_at_s: Date.now() / 1000, step_s: 1, gap_s: LIVE_GAP_S, nodes: new Map()};
+  colours.clear(); /* live sensors start from the first colour */
+  setConnectLabel();
+  setSpan(300);
+  const decoder = new TextDecoderStream();
+  const closed = port.readable.pipeTo(decoder.writable).catch(() => {});
+  const reader = live.reader = decoder.readable.getReader();
+  let buffer = '';
+  try {
+    for (;;) {
+      const {value, done} = await reader.read();
+      if (done) break;
+      buffer += value;
+      let end;
+      while ((end = buffer.indexOf('\n')) >= 0) {
+        const r = parseLine(buffer.slice(0, end));
+        buffer = buffer.slice(end + 1);
+        if (r) addLive(r);
+      }
+      if (buffer.length > 4096) buffer = '';
+    }
+  } catch (e) { /* unplugged or closed */ }
+  reader.releaseLock();
+  await closed;
+  await port.close().catch(() => {});
+  live.port = live.reader = null;
+  setConnectLabel();
+  const missed = [...view.nodes.values()].reduce((m, s) => m + (s.missed || 0), 0);
+  document.getElementById('banner').innerHTML = `<strong>BRAIN DISCONNECTED</strong> — ${live.count} live readings from ${view.nodes.size} sensor(s) were shown, ${missed} missed. Reconnect, or reload to see published readings.`;
+}
+
+async function loadCloud() {
+  const r = await fetch(SUPABASE.url + '/rest/v1/rpc/bme280_series', {
+    method: 'POST', cache: 'no-store',
+    headers: {apikey: SUPABASE.key, 'Content-Type': 'application/json'},
+    body: JSON.stringify({window_s: Math.max(span, 300)}),
+  });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const j = await r.json();
+  return j.nodes && j.nodes.length ? fromCloud(j) : null; /* nothing ever uploaded: use the published copy */
+}
+
+async function load() {
+  if (source === 'live') return; /* Live readings are newer than anything published. */
+  try {
+    const before = source;
+    const cloud = SUPABASE.url ? await loadCloud().catch(() => null) : null;
+    if (cloud) { view = cloud; source = 'cloud'; }
+    else {
+      const r = await fetch('data/bme280.json?t=' + Date.now(), {cache: 'no-store'});
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      view = fromPublished(await r.json());
+      source = 'published';
+    }
+    if (source !== before) colours.clear(); /* a new source starts from the first colour */
+    render();
+  } catch (e) {
+    document.getElementById('banner').textContent = 'Could not load readings (' + e.message + '). Retrying shortly.';
+  }
+}
+
+document.querySelectorAll('button[data-seconds]').forEach(b => b.addEventListener('click', () => setSpan(+b.dataset.seconds)));
+let resizeTimer;
+addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => view && render(), 150); });
+const connect = document.getElementById('connect');
+if ('serial' in navigator) connect.addEventListener('click', connectBrain);
+else {
+  connect.hidden = true;
+  document.getElementById('connect-hint').textContent = 'To see live readings from a brain ESP32 plugged into this computer, open this page in Chrome or Edge on a laptop or desktop.';
+}
+load();
+setInterval(load, SUPABASE.url ? 10000 : 60000);
+/* Keep the clock and graphs moving while sensors are silent, so a stopped link is visible. */
+setInterval(() => {
+  if (source !== 'live' || !live.port) return;
+  view.generated_at_s = Date.now() / 1000;
+  render();
+}, 1000);
+</script>
+</body>
+</html>
